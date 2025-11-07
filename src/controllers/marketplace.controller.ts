@@ -1,5 +1,9 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
+import { Types } from 'mongoose';
+import { AuthRequest } from '../middleware/authMiddleware.js';
+import Listing from '../models/Listing.js';
+import User from '../models/User.js';
+import { uploadImages } from '../services/storageService.js';
 
 /**
  * Create marketplace listing
@@ -10,32 +14,52 @@ export const createListing = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
-    const { title, description, category, price, location } = req.body;
+    const { title, description, category, price, location, condition, images } = req.body;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    if (!title || !price) {
-      res.status(400).json({ error: 'Title and price are required' });
+    if (!title || !price || !category) {
+      res.status(400).json({ error: 'Title, price, and category are required' });
       return;
     }
 
-    const listing = {
-      id: `listing_${Date.now()}`,
-      sellerId: req.user.id,
+    // Get seller name from user
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const isAdmin = Boolean(user.isAdmin);
+    const listing = new Listing({
       title,
       description,
       category,
       price,
       location,
-      status: 'active',
-      createdAt: new Date(),
-    };
+      sellerId: userId,
+      sellerName: user.username,
+      condition,
+      images: images || [],
+      status: isAdmin ? 'active' : 'inactive',
+      moderationStatus: isAdmin ? 'approved' : 'pending',
+      reviewedBy: isAdmin ? new Types.ObjectId(user._id as any) : undefined,
+      reviewedAt: isAdmin ? new Date() : undefined,
+      rejectionReason: undefined,
+    });
 
-    res.status(201).json({ message: 'Listing created successfully', listing });
+    await listing.save();
+
+    res.status(201).json({
+      message: isAdmin
+        ? 'Listing published successfully.'
+        : 'Listing submitted for review. An admin will approve it shortly.',
+      listing,
+    });
   } catch (error) {
     console.error('Create listing error:', error);
     res.status(500).json({ error: 'Failed to create listing' });
@@ -51,17 +75,42 @@ export const listListings = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration with pagination and filtering
-    const { page = 1, limit = 20, category, search } = req.query;
+    const { page = 1, limit = 20, category, search, status = 'active', moderationStatus } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
 
-    const listings = [];
+    const filter: any = { status: status || 'active' };
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    if (moderationStatus) {
+      filter.moderationStatus = moderationStatus;
+    } else {
+      filter.$or = [
+        { moderationStatus: 'approved' },
+        { moderationStatus: { $exists: false } },
+      ];
+    }
+
+    const total = await Listing.countDocuments(filter);
+    const listings = await Listing.find(filter)
+      .populate('sellerId', 'username email')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     res.status(200).json({
       data: listings,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total: listings.length,
+        page: pageNum,
+        limit: limitNum,
+        total,
       },
     });
   } catch (error) {
@@ -79,16 +128,34 @@ export const getListing = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
     const { id } = req.params;
 
-    const listing = {
+    const listing = await Listing.findByIdAndUpdate(
       id,
-      title: 'Sample Item',
-      description: 'Description',
-      price: 100,
-      status: 'active',
-    };
+      { $inc: { views: 1 } },
+      { new: true }
+    ).populate('sellerId', 'username email');
+
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
+
+    const requesterId = (req as any).userId ? (req as any).userId.toString() : null;
+    const isAdmin = Boolean((req as any).isAdmin);
+    const isOwner = requesterId && listing.sellerId
+      ? (listing.sellerId as any)._id?.toString() === requesterId
+      : false;
+
+    if (
+      listing.moderationStatus &&
+      listing.moderationStatus !== 'approved' &&
+      !isOwner &&
+      !isAdmin
+    ) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
 
     res.status(200).json({ data: listing });
   } catch (error) {
@@ -108,18 +175,65 @@ export const updateListing = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const updatedListing = {
-      id,
-      ...req.body,
-      updatedAt: new Date(),
-    };
+    const [listing, currentUser] = await Promise.all([
+      Listing.findById(id),
+      User.findById(userId),
+    ]);
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
+    const isAdmin = Boolean(currentUser?.isAdmin);
+    const isOwner = listing.sellerId.toString() === userId.toString();
 
-    res.status(200).json({ message: 'Listing updated successfully', listing: updatedListing });
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'You can only update your own listings' });
+      return;
+    }
+
+    const allowedFields = ['title', 'description', 'price', 'location', 'category', 'condition', 'status', 'images'];
+    allowedFields.forEach((field) => {
+      if (field in req.body) {
+        (listing as any)[field] = req.body[field];
+      }
+    });
+
+    if (isAdmin && 'moderationStatus' in req.body) {
+      const nextStatus = req.body.moderationStatus;
+      if (!['pending', 'approved', 'rejected'].includes(nextStatus)) {
+        res.status(400).json({ error: 'Invalid moderation status' });
+        return;
+      }
+      listing.moderationStatus = nextStatus;
+      listing.reviewedBy = currentUser
+        ? new Types.ObjectId(currentUser._id as any)
+        : listing.reviewedBy ?? null;
+      listing.reviewedAt = new Date();
+      listing.rejectionReason =
+        nextStatus === 'rejected' ? req.body.rejectionReason || null : null;
+      if (nextStatus === 'approved' && listing.status === 'inactive') {
+        listing.status = 'active';
+      }
+      if (nextStatus === 'rejected') {
+        listing.status = 'inactive';
+      }
+    } else if (!isAdmin) {
+      listing.moderationStatus = 'pending';
+      listing.status = 'inactive';
+      listing.reviewedBy = null;
+      listing.reviewedAt = null;
+      listing.rejectionReason = null;
+    }
+
+    await listing.save();
+
+    res.status(200).json({ message: 'Listing updated successfully', listing });
   } catch (error) {
     console.error('Update listing error:', error);
     res.status(500).json({ error: 'Failed to update listing' });
@@ -137,10 +251,28 @@ export const deleteListing = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    const [listing, currentUser] = await Promise.all([
+      Listing.findById(id),
+      User.findById(userId),
+    ]);
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
+
+    const isAdmin = Boolean(currentUser?.isAdmin);
+    if (listing.sellerId.toString() !== userId && !isAdmin) {
+      res.status(403).json({ error: 'You can only delete your own listings' });
+      return;
+    }
+
+    await Listing.findByIdAndDelete(id);
 
     res.status(200).json({ message: 'Listing deleted successfully' });
   } catch (error) {
@@ -160,14 +292,72 @@ export const favoriteListing = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    res.status(201).json({ message: 'Listing added to favorites' });
+    const listing = await Listing.findById(id);
+    if (!listing) {
+      res.status(404).json({ error: 'Listing not found' });
+      return;
+    }
+
+    if (listing.moderationStatus && listing.moderationStatus !== 'approved') {
+      res.status(400).json({ error: 'Listing is awaiting admin approval' });
+      return;
+    }
+
+    const isFavorited = listing.favorites.some(fav => fav.toString() === userId);
+
+    if (isFavorited) {
+      // Remove from favorites
+      listing.favorites = listing.favorites.filter(fav => fav.toString() !== userId);
+      await listing.save();
+      res.status(200).json({ message: 'Listing removed from favorites', favorited: false });
+    } else {
+      // Add to favorites
+      listing.favorites.push(userId as any);
+      await listing.save();
+      res.status(201).json({ message: 'Listing added to favorites', favorited: true });
+    }
   } catch (error) {
     console.error('Favorite listing error:', error);
     res.status(500).json({ error: 'Failed to favorite listing' });
+  }
+};
+
+/**
+ * Upload listing images
+ * POST /api/v1/marketplace/upload
+ */
+export const uploadListingImages = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = (req as any).userId || (req as any).user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const files = (req as any).files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ error: 'No images provided' });
+      return;
+    }
+
+    // Upload images to MinIO/S3
+    const imageUrls = await uploadImages(files, 'marketplace/listings');
+
+    res.status(200).json({
+      message: 'Images uploaded successfully',
+      images: imageUrls,
+    });
+  } catch (error: any) {
+    console.error('Image upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload images' });
   }
 };

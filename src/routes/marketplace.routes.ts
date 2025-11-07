@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticate } from '../middleware/authMiddleware.js';
+import { uploadMultipleImages } from '../middleware/uploadMiddleware.js';
 import {
   createListing,
   listListings,
@@ -7,7 +8,8 @@ import {
   updateListing,
   deleteListing,
   favoriteListing,
-} from '../controllers/marketplace.controller';
+  uploadListingImages,
+} from '../controllers/marketplace.controller.js';
 
 const router = Router();
 
@@ -16,9 +18,12 @@ router.get('/listings', listListings);
 router.get('/listings/:id', getListing);
 
 // Private routes
-router.post('/listings', authenticateToken, createListing);
-router.put('/listings/:id', authenticateToken, updateListing);
-router.delete('/listings/:id', authenticateToken, deleteListing);
-router.post('/listings/:id/favorite', authenticateToken, favoriteListing);
+router.post('/listings', authenticate, createListing);
+router.put('/listings/:id', authenticate, updateListing);
+router.delete('/listings/:id', authenticate, deleteListing);
+router.post('/listings/:id/favorite', authenticate, favoriteListing);
+
+// Image upload route
+router.post('/upload', authenticate, uploadMultipleImages, uploadListingImages);
 
 export default router;

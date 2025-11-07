@@ -1,5 +1,8 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth.js';
+import Business from '../models/Business.js';
+import User from '../models/User.js';
+import { uploadBusinessImages as uploadBusinessImagesToStorage } from '../services/storageService.js';
 
 /**
  * Create business
@@ -10,10 +13,10 @@ export const createBusiness = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
     const { businessName, description, category, phone, email, address } = req.body;
 
-    if (!req.user) {
+    const userId = (req as any).user?.id;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -23,19 +26,27 @@ export const createBusiness = async (
       return;
     }
 
-    const business = {
-      id: `business_${Date.now()}`,
-      ownerId: req.user.id,
+    // Get owner name from user
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const business = new Business({
       businessName,
       description,
       category,
       phone,
       email,
       address,
+      ownerId: userId,
+      ownerName: user.username,
       status: 'draft',
       verified: false,
-      createdAt: new Date(),
-    };
+    });
+
+    await business.save();
 
     res.status(201).json({ message: 'Business created successfully', business });
   } catch (error) {
@@ -53,17 +64,37 @@ export const listBusinesses = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration with pagination and filtering
     const { page = 1, limit = 20, category, search, verified } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
 
-    const businesses = [];
+    const filter: any = {};
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (verified) {
+      filter.verified = verified === 'true';
+    }
+
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    const total = await Business.countDocuments(filter);
+    const businesses = await Business.find(filter)
+      .populate('ownerId', 'username email')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     res.status(200).json({
       data: businesses,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total: businesses.length,
+        page: pageNum,
+        limit: limitNum,
+        total,
       },
     });
   } catch (error) {
@@ -81,16 +112,15 @@ export const getBusiness = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
     const { id } = req.params;
 
-    const business = {
-      id,
-      businessName: 'Sample Business',
-      category: 'restaurant',
-      rating: 4.5,
-      verified: false,
-    };
+    const business = await Business.findById(id)
+      .populate('ownerId', 'username email');
+
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
 
     res.status(200).json({ data: business });
   } catch (error) {
@@ -110,16 +140,34 @@ export const updateBusiness = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).user?.id;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const updatedBusiness = {
-      id,
-      ...req.body,
-      updatedAt: new Date(),
-    };
+    const business = await Business.findById(id);
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    // Check if user is the owner
+    if (business.ownerId.toString() !== userId) {
+      res.status(403).json({ error: 'You can only update your own businesses' });
+      return;
+    }
+
+    const allowedFields = ['businessName', 'description', 'category', 'phone', 'email', 'address', 'status'];
+    const updates: any = {};
+
+    allowedFields.forEach(field => {
+      if (field in req.body) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    const updatedBusiness = await Business.findByIdAndUpdate(id, updates, { new: true });
 
     res.status(200).json({ message: 'Business updated successfully', business: updatedBusiness });
   } catch (error) {
@@ -139,10 +187,25 @@ export const deleteBusiness = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).user?.id;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    const business = await Business.findById(id);
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    // Check if user is the owner
+    if (business.ownerId.toString() !== userId) {
+      res.status(403).json({ error: 'You can only delete your own businesses' });
+      return;
+    }
+
+    await Business.findByIdAndDelete(id);
 
     res.status(200).json({ message: 'Business deleted successfully' });
   } catch (error) {
@@ -162,19 +225,89 @@ export const getBusinessReviews = async (
   try {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
 
-    const reviews = [];
+    // For now, return empty reviews as Review model doesn't exist
+    const reviews: any[] = [];
 
     res.status(200).json({
       data: reviews,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page: pageNum,
+        limit: limitNum,
         total: reviews.length,
       },
     });
   } catch (error) {
     console.error('Get reviews error:', error);
     res.status(500).json({ error: 'Failed to get reviews' });
+  }
+};
+
+/**
+ * Upload business images
+ * POST /api/v1/businesses/:id/images
+ */
+export const uploadBusinessImages = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { setAsFeatured } = req.query;
+
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const business = await Business.findById(id);
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    // Check if user is the owner or admin
+    const user = await User.findById(userId);
+    if (business.ownerId.toString() !== userId && !user?.isAdmin) {
+      res.status(403).json({ error: 'You can only upload images to your own businesses' });
+      return;
+    }
+
+    // Check if files were uploaded
+    const files = (req as any).files;
+    if (!files || files.length === 0) {
+      res.status(400).json({ error: 'No files uploaded' });
+      return;
+    }
+
+    // Upload images to business bucket
+    const uploadedImages = await uploadBusinessImagesToStorage(files);
+    if (!uploadedImages || uploadedImages.length === 0) {
+      res.status(500).json({ error: 'Failed to upload images' });
+      return;
+    }
+
+    // Add images to business
+    business.images = [...(business.images || []), ...uploadedImages];
+
+    // Set as featured image if specified
+    if (setAsFeatured === 'true' && uploadedImages.length > 0) {
+      business.featuredImage = uploadedImages[0];
+    } else if (!business.featuredImage && uploadedImages.length > 0) {
+      business.featuredImage = uploadedImages[0];
+    }
+
+    await business.save();
+
+    res.status(200).json({
+      message: 'Images uploaded successfully',
+      business,
+    });
+  } catch (error) {
+    console.error('Upload business images error:', error);
+    res.status(500).json({ error: 'Failed to upload images' });
   }
 };
