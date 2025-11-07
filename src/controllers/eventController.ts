@@ -5,7 +5,7 @@ import User from '../models/User.js';
 // Create event
 export const createEvent = async (req: Request, res: Response) => {
   try {
-    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags } = req.body;
+    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price } = req.body;
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -27,6 +27,7 @@ export const createEvent = async (req: Request, res: Response) => {
     const isAdmin = Boolean(user.isAdmin);
 
     // Create event
+    const eventPrice = price ? parseFloat(price) : 0;
     const newEvent = new Event({
       title,
       description,
@@ -40,6 +41,8 @@ export const createEvent = async (req: Request, res: Response) => {
       maxAttendees,
       image,
       tags: tags || [],
+      price: eventPrice,
+      isFree: eventPrice === 0,
       attendees: [userId], // Organizer is first attendee
       moderationStatus: isAdmin ? 'approved' : 'pending', // Auto-approve for admins, pending for users
       reviewedBy: isAdmin ? userId : undefined,
@@ -225,7 +228,7 @@ export const rsvpEvent = async (req: Request, res: Response) => {
 
     // Check if user already attending
     if (event.attendees.includes(userId)) {
-      return res.status(400).json({ error: 'Already attending this event' });
+      return res.status(400).json({ error: 'You have already registered for this event' });
     }
 
     // Check max attendees
@@ -237,7 +240,8 @@ export const rsvpEvent = async (req: Request, res: Response) => {
     await event.save();
 
     res.status(200).json({
-      message: 'RSVP successful',
+      message: 'You have successfully registered for this event! 🎉',
+      success: true,
       event,
     });
   } catch (error: any) {
@@ -265,19 +269,20 @@ export const cancelRsvp = async (req: Request, res: Response) => {
     const index = event.attendees.findIndex((attendee) => attendee.toString() === userId);
 
     if (index === -1) {
-      return res.status(400).json({ error: 'Not attending this event' });
+      return res.status(400).json({ error: 'You are not registered for this event' });
     }
 
     event.attendees.splice(index, 1);
     await event.save();
 
     res.status(200).json({
-      message: 'RSVP cancelled',
+      message: 'You have successfully cancelled your registration for this event.',
+      success: true,
       event,
     });
   } catch (error: any) {
     console.error('Cancel RSVP error:', error);
-    res.status(500).json({ error: 'Failed to cancel RSVP' });
+    res.status(500).json({ error: 'Failed to cancel registration' });
   }
 };
 
