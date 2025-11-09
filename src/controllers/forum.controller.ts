@@ -1,5 +1,8 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth.js';
+import ForumPost from '../models/ForumPost.js';
+import ForumReply from '../models/ForumReply.js';
+import User from '../models/User.js';
 
 /**
  * Create forum post
@@ -10,10 +13,10 @@ export const createPost = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration (MongoDB)
     const { title, content, category, tags } = req.body;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -23,19 +26,29 @@ export const createPost = async (
       return;
     }
 
-    const post = {
-      _id: `post_${Date.now()}`,
-      userId: req.user.id,
+    if (!category) {
+      res.status(400).json({ error: 'Category is required' });
+      return;
+    }
+
+    // Get author name from user
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const post = new ForumPost({
       title,
       content,
       category,
       tags: tags || [],
-      repliesCount: 0,
-      viewsCount: 0,
-      votes: 0,
+      authorId: userId,
+      authorName: user.username,
       status: 'published',
-      createdAt: new Date(),
-    };
+    });
+
+    await post.save();
 
     res.status(201).json({ message: 'Post created successfully', post });
   } catch (error) {
@@ -53,17 +66,33 @@ export const listPosts = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration with pagination
     const { page = 1, limit = 20, category, search } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
 
-    const posts = [];
+    const filter: any = { status: 'published' };
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    const total = await ForumPost.countDocuments(filter);
+    const posts = await ForumPost.find(filter)
+      .populate('authorId', 'username email')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     res.status(200).json({
       data: posts,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total: posts.length,
+        page: pageNum,
+        limit: limitNum,
+        total,
       },
     });
   } catch (error) {
@@ -81,16 +110,19 @@ export const getPost = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
     const { id } = req.params;
 
-    const post = {
-      _id: id,
-      title: 'Sample Post',
-      content: 'Post content',
-      viewsCount: 42,
-      repliesCount: 5,
-    };
+    const post = await ForumPost.findById(id)
+      .populate('authorId', 'username email');
+
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    // Increment view count
+    post.viewsCount = (post.viewsCount || 0) + 1;
+    await post.save();
 
     res.status(200).json({ data: post });
   } catch (error) {
@@ -110,16 +142,34 @@ export const updatePost = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const updatedPost = {
-      _id: id,
-      ...req.body,
-      updatedAt: new Date(),
-    };
+    const post = await ForumPost.findById(id);
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    // Check if user is the author
+    if (post.authorId.toString() !== userId) {
+      res.status(403).json({ error: 'You can only update your own posts' });
+      return;
+    }
+
+    const allowedFields = ['title', 'content', 'category', 'tags', 'status'];
+    const updates: any = {};
+
+    allowedFields.forEach(field => {
+      if (field in req.body) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    const updatedPost = await ForumPost.findByIdAndUpdate(id, updates, { new: true });
 
     res.status(200).json({ message: 'Post updated successfully', post: updatedPost });
   } catch (error) {
@@ -139,10 +189,25 @@ export const deletePost = async (
   try {
     const { id } = req.params;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    const post = await ForumPost.findById(id);
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    // Check if user is the author
+    if (post.authorId.toString() !== userId) {
+      res.status(403).json({ error: 'You can only delete your own posts' });
+      return;
+    }
+
+    await ForumPost.findByIdAndDelete(id);
 
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (error) {
@@ -160,11 +225,11 @@ export const addReply = async (
   res: Response
 ): Promise<void> => {
   try {
-    // TODO: Implement database integration
     const { id } = req.params;
     const { content } = req.body;
 
-    if (!req.user) {
+    const userId = (req as any).userId;
+    if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -174,14 +239,33 @@ export const addReply = async (
       return;
     }
 
-    const reply = {
-      _id: `reply_${Date.now()}`,
+    // Check if post exists
+    const post = await ForumPost.findById(id);
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    // Get author name from user
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const reply = new ForumReply({
       postId: id,
-      userId: req.user.id,
       content,
-      votes: 0,
-      createdAt: new Date(),
-    };
+      authorId: userId,
+      authorName: user.username,
+      status: 'published',
+    });
+
+    await reply.save();
+
+    // Increment replies count on post
+    post.repliesCount = (post.repliesCount || 0) + 1;
+    await post.save();
 
     res.status(201).json({ message: 'Reply added successfully', reply });
   } catch (error) {
@@ -201,15 +285,24 @@ export const getReplies = async (
   try {
     const { id } = req.params;
     const { page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
 
-    const replies = [];
+    const filter = { postId: id, status: 'published' };
+
+    const total = await ForumReply.countDocuments(filter);
+    const replies = await ForumReply.find(filter)
+      .populate('authorId', 'username email')
+      .sort({ createdAt: 1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     res.status(200).json({
       data: replies,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        total: replies.length,
+        page: pageNum,
+        limit: limitNum,
+        total,
       },
     });
   } catch (error) {

@@ -1,0 +1,1 @@
+{"version":3,"file":"adminAccount.d.ts","sourceRoot":"","sources":["../../src/services/adminAccount.ts"],"names":[],"mappings":"AAEA,UAAU,kBAAkB;IAC1B,KAAK,EAAE,MAAM,CAAA;IACb,QAAQ,EAAE,MAAM,CAAA;IAChB,IAAI,EAAE,MAAM,CAAA;IACZ,IAAI,EAAE,MAAM,CAAA;IACZ,YAAY,EAAE,MAAM,CAAA;CACrB;AAED,eAAO,MAAM,kBAAkB,GAAU,gDAMtC,kBAAkB;;;;EA+CpB,CAAA;AAED,eAAe,kBAAkB,CAAA"}

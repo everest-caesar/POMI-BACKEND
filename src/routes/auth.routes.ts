@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { register, login, getCurrentUser } from '../controllers/authController';
-import { authenticate } from '../middleware/authMiddleware';
+import { register, login, getCurrentUser } from '../controllers/authController.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register a new user
- * @body    { email, password, username }
+ * @body    { email, password, username, age, area, workOrSchool, adminInviteCode? }
  * @returns { token, user }
  */
 router.post('/register', register);

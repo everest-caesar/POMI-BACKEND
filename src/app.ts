@@ -3,20 +3,19 @@ import cors from 'cors';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import 'dotenv/config';
-import apiRoutes from './routes/index';
+import apiRoutes from './routes/index.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pomi';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://pomi_user:pomi_password@localhost:27017/pomi?authSource=admin';
 
 // Middleware
-app.use(helmet());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: process.env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // MongoDB Connection
 const connectDB = async () => {
@@ -28,6 +27,9 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
+
+// Connect to MongoDB on app startup
+connectDB();
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -43,20 +45,11 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/v1', apiRoutes);
 
 // Error handling middleware
-app.use((err: any, req: Request, res: Response) => {
+app.use((err: any, req: Request, res: Response, next: any) => {
   console.error(err);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// Start server
-if (import.meta.url === `file://${process.argv[1]}`) {
-  connectDB().then(() => {
-    app.listen(PORT, () => {
-      console.log(`\n🍎 Pomi API Server Running`);
-      console.log(`📍 http://localhost:${PORT}`);
-      console.log(`🏥 Health: http://localhost:${PORT}/health\n`);
-    });
-  });
-}
+// Note: Server startup moved to separate index.ts to avoid import.meta issues with tests
 
 export default app;

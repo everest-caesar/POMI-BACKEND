@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth.js';
 import {
   createMatch,
   listMatches,
   getMatch,
   updateMatch,
   deleteMatch,
-} from '../controllers/mentorship.controller';
+} from '../controllers/mentorship.controller.js';
 
 const router = Router();
 

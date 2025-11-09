@@ -13,6 +13,15 @@ const JWT_EXPIRY = process.env.JWT_EXPIRY || '3600'; // 1 hour
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '604800'; // 7 days
 
 /**
+ * Generate simple token (for testing)
+ */
+export const generateToken = (userId: string): string => {
+  return jwt.sign({ userId }, JWT_SECRET, {
+    expiresIn: '7d',
+  });
+};
+
+/**
  * Generate access token
  */
 export const generateAccessToken = (payload: Omit<JwtPayload, 'type'>): string => {

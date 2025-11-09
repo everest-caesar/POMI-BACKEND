@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth.js';
 import {
   createGroup,
   listGroups,
@@ -8,7 +8,7 @@ import {
   deleteGroup,
   joinGroup,
   leaveGroup,
-} from '../controllers/community.controller';
+} from '../controllers/community.controller.js';
 
 const router = Router();
 

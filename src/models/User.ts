@@ -6,6 +6,10 @@ export interface IUser {
   email: string;
   password: string;
   username: string;
+  age?: number;
+  area?: string;
+  workOrSchool?: string;
+  isAdmin: boolean;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
@@ -29,6 +33,40 @@ const userSchema = new mongoose.Schema<IUser>({
     required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters'],
     select: false, // Don't include password by default in queries
+  },
+  age: {
+    type: Number,
+    min: [13, 'You must be at least 13 years old'],
+    max: [120, 'Please enter a valid age'],
+  },
+  area: {
+    type: String,
+    trim: true,
+    enum: [
+      'Downtown Ottawa',
+      'Barrhaven',
+      'Kanata',
+      'Nepean',
+      'Gloucester',
+      'Orleans',
+      'Vanier',
+      'Westboro',
+      'Rockcliffe Park',
+      'Sandy Hill',
+      'The Glebe',
+      'Bytown',
+      'South Ottawa',
+      'North Ottawa',
+      'Outside Ottawa',
+    ],
+  },
+  workOrSchool: {
+    type: String,
+    trim: true,
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false,
   },
 }, {
   timestamps: true,

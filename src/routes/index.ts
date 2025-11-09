@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import authRoutes from './auth.routes';
-import eventsRoutes from './events.routes';
-import marketplaceRoutes from './marketplace.routes';
-import businessRoutes from './business.routes';
-import forumRoutes from './forum.routes';
-import mentorshipRoutes from './mentorship.routes';
-import communityRoutes from './community.routes';
+import authRoutes from './auth.routes.js';
+import eventsRoutes from './events.routes.js';
+import marketplaceRoutes from './marketplace.routes.js';
+import businessRoutes from './business.routes.js';
+import forumRoutes from './forum.routes.js';
+import mentorshipRoutes from './mentorship.routes.js';
+import communityRoutes from './community.routes.js';
+import adminRoutes from './admin.routes.js';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use('/businesses', businessRoutes);
 router.use('/forums', forumRoutes);
 router.use('/mentorship', mentorshipRoutes);
 router.use('/community', communityRoutes);
+router.use('/admin', adminRoutes);
 
 // Status endpoint
 router.get('/status', (_req, res) => {

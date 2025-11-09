@@ -5,7 +5,7 @@ import User from '../models/User.js';
 // Create event
 export const createEvent = async (req: Request, res: Response) => {
   try {
-    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price } = req.body;
+    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price, ticketLink } = req.body;
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -13,7 +13,7 @@ export const createEvent = async (req: Request, res: Response) => {
     }
 
     // Validation
-    if (!title || !description || !location || !date || !startTime || !endTime) {
+    if (!title || !description || !location || !date || !startTime || !endTime || !ticketLink) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -43,6 +43,7 @@ export const createEvent = async (req: Request, res: Response) => {
       tags: tags || [],
       price: eventPrice,
       isFree: eventPrice === 0,
+      ticketLink,
       attendees: [userId], // Organizer is first attendee
       moderationStatus: isAdmin ? 'approved' : 'pending', // Auto-approve for admins, pending for users
       reviewedBy: isAdmin ? userId : undefined,

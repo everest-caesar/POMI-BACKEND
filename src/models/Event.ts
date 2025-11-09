@@ -18,6 +18,7 @@ export interface IEvent extends Document {
   price?: number; // 0 for free, amount in cents for paid events
   isFree: boolean;
   stripeProductId?: string; // Stripe product ID for paid events
+  ticketLink?: string; // Link to external ticket sales (Eventbrite, etc.)
   moderationStatus: 'pending' | 'approved' | 'rejected';
   reviewedBy?: mongoose.Types.ObjectId | null;
   reviewedAt?: Date | null;
@@ -98,6 +99,21 @@ const eventSchema = new Schema<IEvent>(
       default: true,
     },
     stripeProductId: String,
+    ticketLink: {
+      type: String,
+      validate: {
+        validator: (url: string) => {
+          if (!url) return true; // Optional field
+          try {
+            new URL(url);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        message: 'Invalid URL format for ticket link',
+      },
+    },
     moderationStatus: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],

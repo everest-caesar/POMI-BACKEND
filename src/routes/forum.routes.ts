@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken } from '../middleware/auth.js';
 import {
   createPost,
   listPosts,
@@ -8,7 +8,7 @@ import {
   deletePost,
   addReply,
   getReplies,
-} from '../controllers/forum.controller';
+} from '../controllers/forum.controller.js';
 
 const router = Router();
 

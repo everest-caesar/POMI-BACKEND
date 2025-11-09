@@ -1,16 +1,33 @@
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth';
-import { generateTokenPair, verifyToken } from '../utils/jwt';
-import { hashPassword, comparePassword, validatePasswordStrength } from '../utils/bcrypt';
+import { AuthRequest } from '../middleware/auth.js';
+import { generateTokenPair, verifyToken } from '../utils/jwt.js';
+import { hashPassword, comparePassword, validatePasswordStrength } from '../utils/bcrypt.js';
 import {
   validateEmail,
   validateRegistration,
   validateLogin,
-} from '../validators/auth';
+} from '../validators/auth.js';
+import User from '../models/User.js';
 
-// TODO: Replace with actual database calls
-const mockUsers: Record<string, any> = {};
-const mockTokens: Record<string, any> = {};
+const OTTAWA_AREAS = [
+  'Downtown Ottawa',
+  'Barrhaven',
+  'Kanata',
+  'Nepean',
+  'Gloucester',
+  'Orleans',
+  'Vanier',
+  'Westboro',
+  'Rockcliffe Park',
+  'Sandy Hill',
+  'The Glebe',
+  'Bytown',
+  'South Ottawa',
+  'North Ottawa',
+  'Outside Ottawa',
+];
+
+const ADMIN_INVITE_CODE = process.env.ADMIN_INVITE_CODE;
 
 /**
  * Register new user
@@ -21,7 +38,11 @@ export const register = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { email, username, password, firstName, lastName } = req.body;
+    const { email, username, password } = req.body;
+    const rawAge = req.body.age;
+    const rawArea = req.body.area;
+    const rawWorkOrSchool = req.body.workOrSchool;
+    const adminInviteCode = req.body.adminInviteCode;
 
     // Validate input
     const validation = validateRegistration({ email, username, password });
@@ -37,56 +58,121 @@ export const register = async (
       return;
     }
 
-    // Check if user exists (mock)
-    if (mockUsers[email]) {
+    if (rawAge === undefined || rawAge === null || rawAge === '') {
+      res.status(400).json({ error: 'Age is required' });
+      return;
+    }
+
+    const parsedAge =
+      typeof rawAge === 'string' ? parseInt(rawAge, 10) : Number(rawAge);
+    if (Number.isNaN(parsedAge)) {
+      res.status(400).json({ error: 'Age must be a number' });
+      return;
+    }
+    if (parsedAge < 13 || parsedAge > 120) {
+      res.status(400).json({ error: 'Age must be between 13 and 120' });
+      return;
+    }
+
+    if (typeof rawArea !== 'string' || rawArea.trim() === '') {
+      res.status(400).json({ error: 'Area is required' });
+      return;
+    }
+    const trimmedArea = rawArea.trim();
+    if (!OTTAWA_AREAS.includes(trimmedArea)) {
+      res.status(400).json({ error: 'Please select a valid area' });
+      return;
+    }
+
+    if (typeof rawWorkOrSchool !== 'string' || rawWorkOrSchool.trim() === '') {
+      res.status(400).json({ error: 'School or workplace is required' });
+      return;
+    }
+    const trimmedWorkOrSchool = rawWorkOrSchool.trim();
+
+    let isAdmin = false;
+    if (adminInviteCode) {
+      if (!ADMIN_INVITE_CODE) {
+        res.status(403).json({ error: 'Admin registration is disabled' });
+        return;
+      }
+      if (adminInviteCode !== ADMIN_INVITE_CODE) {
+        res.status(400).json({ error: 'Invalid admin invite code' });
+        return;
+      }
+      isAdmin = true;
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
       res.status(409).json({ error: 'Email already registered' });
       return;
     }
 
-    // Hash password
-    const passwordHash = await hashPassword(password);
-
-    // Create user (mock)
-    const userId = `user_${Date.now()}`;
-    mockUsers[email] = {
-      id: userId,
+    // Create new user
+    const newUser = new User({
       email,
       username,
-      passwordHash,
-      firstName: firstName || '',
-      lastName: lastName || '',
-      emailVerified: false,
-      createdAt: new Date(),
-    };
+      password, // Password will be hashed by the model's pre-save hook
+      age: parsedAge,
+      area: trimmedArea,
+      workOrSchool: trimmedWorkOrSchool,
+      isAdmin,
+    });
+
+    console.log('📝 Before save:', {
+      age: newUser.age,
+      area: newUser.area,
+      workOrSchool: newUser.workOrSchool,
+      isAdmin: newUser.isAdmin,
+      isAdminType: typeof newUser.isAdmin,
+    });
+
+    await newUser.save();
+
+    console.log('✅ After save:', {
+      age: newUser.age,
+      area: newUser.area,
+      workOrSchool: newUser.workOrSchool,
+      isAdmin: newUser.isAdmin,
+      isAdminType: typeof newUser.isAdmin,
+    });
 
     // Generate tokens
     const { accessToken, refreshToken } = generateTokenPair(
-      userId,
-      email,
-      username,
-      false
+      newUser._id.toString(),
+      newUser.email,
+      newUser.username,
+      isAdmin
     );
 
-    // Store refresh token (mock)
-    mockTokens[refreshToken] = {
-      userId,
-      type: 'refresh',
-      createdAt: new Date(),
+    // Build response object with all fields
+    const userResponse: any = {
+      _id: newUser._id,
+      email: newUser.email,
+      username: newUser.username,
+      createdAt: newUser.createdAt,
+      isAdmin: newUser.isAdmin,
     };
+
+    // Add optional fields if they exist
+    if (newUser.age !== undefined && newUser.age !== null) {
+      userResponse.age = newUser.age;
+    }
+    if (newUser.area !== undefined && newUser.area !== null) {
+      userResponse.area = newUser.area;
+    }
+    if (newUser.workOrSchool !== undefined && newUser.workOrSchool !== null) {
+      userResponse.workOrSchool = newUser.workOrSchool;
+    }
+
+    console.log('📤 Registration response:', { isAdmin: userResponse.isAdmin });
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: {
-        id: userId,
-        email,
-        username,
-        firstName: firstName || '',
-        lastName: lastName || '',
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
+      user: userResponse,
+      token: accessToken,
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -109,48 +195,49 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Find user (mock)
-    const user = mockUsers[email];
+    // Find user in database (select password for comparison)
+    const user = await User.findOne({ email }).select('+password');
     if (!user) {
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    // Verify password
-    const passwordMatch = await comparePassword(password, user.passwordHash);
+    // Verify password using the model's comparePassword method
+    const passwordMatch = await user.comparePassword(password);
     if (!passwordMatch) {
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    // Generate tokens
-    const { accessToken, refreshToken } = generateTokenPair(
-      user.id,
-      email,
-      user.username,
-      user.isAdmin || false
-    );
+    // Debug logging
+    console.log('🔐 Login - User object:', {
+      id: user._id,
+      email: user.email,
+      isAdmin: user.isAdmin,
+      isAdminType: typeof user.isAdmin,
+      toJSON: user.toJSON?.(),
+    });
 
-    // Store refresh token (mock)
-    mockTokens[refreshToken] = {
-      userId: user.id,
-      type: 'refresh',
-      createdAt: new Date(),
-    };
+    // Generate tokens
+    const { accessToken } = generateTokenPair(
+      user._id.toString(),
+      user.email,
+      user.username,
+      user.isAdmin
+    );
 
     res.status(200).json({
       message: 'Login successful',
       user: {
-        id: user.id,
+        id: user._id,
         email: user.email,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        isAdmin: user.isAdmin,
+        age: user.age,
+        area: user.area,
+        workOrSchool: user.workOrSchool,
       },
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
+      token: accessToken,
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -174,22 +261,15 @@ export const refreshAccessToken = async (
       return;
     }
 
-    // Verify refresh token (mock)
-    const tokenData = mockTokens[refreshToken];
-    if (!tokenData) {
-      res.status(401).json({ error: 'Invalid refresh token' });
-      return;
-    }
-
     // Verify token signature
     const decoded = verifyToken(refreshToken);
-    if (!decoded || decoded.type !== 'refresh') {
+    if (!decoded) {
       res.status(401).json({ error: 'Invalid refresh token' });
       return;
     }
 
-    // Find user (mock)
-    const user = Object.values(mockUsers).find((u) => u.id === decoded.sub);
+    // Find user in database
+    const user = await User.findById(decoded.sub);
     if (!user) {
       res.status(401).json({ error: 'User not found' });
       return;
@@ -197,14 +277,14 @@ export const refreshAccessToken = async (
 
     // Generate new access token
     const { accessToken } = generateTokenPair(
-      user.id,
+      user._id.toString(),
       user.email,
       user.username,
-      user.isAdmin || false
+      false
     );
 
     res.status(200).json({
-      accessToken,
+      token: accessToken,
     });
   } catch (error) {
     console.error('Refresh token error:', error);
@@ -226,21 +306,24 @@ export const getCurrentUser = async (
       return;
     }
 
-    // Find user (mock)
-    const user = Object.values(mockUsers).find((u) => u.id === req.user!.id);
+    // Find user in database
+    const user = await User.findById(req.user.id);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
     res.status(200).json({
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      emailVerified: user.emailVerified,
-      createdAt: user.createdAt,
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        age: user.age,
+        area: user.area,
+        workOrSchool: user.workOrSchool,
+        isAdmin: user.isAdmin,
+        createdAt: user.createdAt,
+      },
     });
   } catch (error) {
     console.error('Get user error:', error);
@@ -254,12 +337,8 @@ export const getCurrentUser = async (
  */
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
-
-    if (refreshToken && mockTokens[refreshToken]) {
-      delete mockTokens[refreshToken];
-    }
-
+    // With JWT, logout is handled client-side by removing the token
+    // Server just confirms the logout
     res.status(200).json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Logout error:', error);
