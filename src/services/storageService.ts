@@ -9,13 +9,15 @@ const {
   S3_BUCKET,
   S3_PUBLIC_URL,
   AWS_REGION,
+  AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY,
 } = process.env;
 
 const isCustomEndpoint = Boolean(S3_ENDPOINT);
 
 const s3Config: AWS.S3.ClientConfiguration = {
-  accessKeyId: S3_ACCESS_KEY || 'pomi_user',
-  secretAccessKey: S3_SECRET_KEY || 'pomi_password',
+  accessKeyId: AWS_ACCESS_KEY_ID || S3_ACCESS_KEY || 'pomi_user',
+  secretAccessKey: AWS_SECRET_ACCESS_KEY || S3_SECRET_KEY || 'pomi_password',
   signatureVersion: 'v4',
   region: AWS_REGION || 'us-east-1',
 };
