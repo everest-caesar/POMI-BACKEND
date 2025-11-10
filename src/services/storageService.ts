@@ -31,7 +31,11 @@ if (isCustomEndpoint && S3_ENDPOINT) {
 const s3Client = new AWS.S3(s3Config);
 
 const BUCKET_NAME = S3_BUCKET || 'marketplace';
-const BUSINESS_BUCKET_NAME = 'businesses';
+// Use same bucket with folder prefixes instead of separate buckets
+const BUSINESS_BUCKET_NAME = BUCKET_NAME;
+
+// Check if using AWS (not MinIO)
+const isUsingAWS = process.env.AWS_ACCESS_KEY_ID && !process.env.S3_ENDPOINT;
 
 const isBucketMissingError = (error: any): boolean => {
   if (!error) return false;
@@ -104,9 +108,16 @@ const extractObjectKey = (imageUrl: string): string => {
 const initializeBucketByName = async (bucketName: string): Promise<void> => {
   try {
     await s3Client.headBucket({ Bucket: bucketName }).promise();
-    console.log(`✅ Bucket "${bucketName}" exists`);
+    console.log(`✅ Bucket "${bucketName}" exists and is accessible`);
   } catch (error: any) {
     if (isBucketMissingError(error)) {
+      // Skip creation if using AWS (production) - bucket must exist already
+      if (isUsingAWS) {
+        console.warn(`⚠️  Bucket "${bucketName}" not found. In production AWS, ensure bucket exists and IAM user has access.`);
+        return;
+      }
+
+      // Only try to create buckets for MinIO (development)
       try {
         await s3Client.createBucket({ Bucket: bucketName }).promise();
         console.log(`✅ Created bucket "${bucketName}"`);
@@ -208,7 +219,8 @@ export const uploadImage = async (
 };
 
 /**
- * Upload image to business bucket
+ * Upload image to business folder within same bucket
+ * Uses folder prefix instead of separate bucket for production AWS compatibility
  * @param file - File buffer and metadata
  * @param attempt - Retry attempt number
  * @returns Public URL of uploaded image
@@ -218,29 +230,29 @@ export const uploadBusinessImage = async (
   attempt: number = 0
 ): Promise<string> => {
   try {
-    // Generate unique filename
+    // Generate unique filename with businesses folder prefix
     const extension = (path.extname(file.originalname) || '.bin').toLowerCase();
-    const objectKey = `${uuidv4()}${extension}`;
+    const objectKey = `businesses/${uuidv4()}${extension}`;
 
-    // Upload to MinIO/S3 business bucket
+    // Upload to same bucket but with businesses/ prefix
     await s3Client
       .putObject({
-        Bucket: BUSINESS_BUCKET_NAME,
+        Bucket: BUCKET_NAME,
         Key: objectKey,
         Body: file.buffer,
         ContentType: file.mimetype,
       })
       .promise();
 
-    // Generate public URL using business bucket name
-    const publicUrl = buildPublicUrl(objectKey, BUSINESS_BUCKET_NAME);
+    // Generate public URL using main bucket name (objectKey includes businesses/ prefix)
+    const publicUrl = buildPublicUrl(objectKey, BUCKET_NAME);
 
     console.log(`✅ Business image uploaded: ${publicUrl}`);
     return publicUrl;
   } catch (error: any) {
     if (isBucketMissingError(error) && attempt < MAX_UPLOAD_RETRY) {
-      console.warn(`⚠️  Bucket "${BUSINESS_BUCKET_NAME}" missing during upload. Attempting to initialize and retry...`);
-      await initializeBusinessBucket();
+      console.warn(`⚠️  Bucket "${BUCKET_NAME}" missing during upload. Attempting to initialize and retry...`);
+      await initializeBucket();
       return uploadBusinessImage(file, attempt + 1);
     }
     console.error('❌ Business image upload error:', error);
@@ -266,7 +278,8 @@ export const uploadImages = async (
 };
 
 /**
- * Upload multiple images to business bucket
+ * Upload multiple images to business folder within same bucket
+ * Each file gets businesses/ prefix, compatible with production AWS
  */
 export const uploadBusinessImages = async (
   files: { buffer: Buffer; originalname: string; mimetype: string }[]
