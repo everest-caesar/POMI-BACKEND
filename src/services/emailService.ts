@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@pomi.community';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@pomi.community';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'marakihay@gmail.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'marakihay@gmail.com';
 
 interface SendEmailOptions {
   to: string;
