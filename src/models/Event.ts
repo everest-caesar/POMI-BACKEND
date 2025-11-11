@@ -19,6 +19,7 @@ export interface IEvent extends Document {
   isFree: boolean;
   stripeProductId?: string; // Stripe product ID for paid events
   ticketLink?: string; // Link to external ticket sales (Eventbrite, etc.)
+  socialMediaLink?: string; // Social media link (Instagram, Facebook, etc.)
   moderationStatus: 'pending' | 'approved' | 'rejected';
   reviewedBy?: mongoose.Types.ObjectId | null;
   reviewedAt?: Date | null;
@@ -112,6 +113,21 @@ const eventSchema = new Schema<IEvent>(
           }
         },
         message: 'Invalid URL format for ticket link',
+      },
+    },
+    socialMediaLink: {
+      type: String,
+      validate: {
+        validator: (url: string) => {
+          if (!url) return true; // Optional field
+          try {
+            new URL(url);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        message: 'Invalid URL format for social media link',
       },
     },
     moderationStatus: {

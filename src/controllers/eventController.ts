@@ -6,7 +6,7 @@ import emailService from '../services/emailService.js';
 // Create event
 export const createEvent = async (req: Request, res: Response) => {
   try {
-    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price, ticketLink } = req.body;
+    const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price, ticketLink, socialMediaLink } = req.body;
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -45,6 +45,7 @@ export const createEvent = async (req: Request, res: Response) => {
       price: eventPrice,
       isFree: eventPrice === 0,
       ticketLink,
+      socialMediaLink,
       attendees: [userId], // Organizer is first attendee
       moderationStatus: isAdmin ? 'approved' : 'pending', // Auto-approve for admins, pending for users
       reviewedBy: isAdmin ? userId : undefined,
