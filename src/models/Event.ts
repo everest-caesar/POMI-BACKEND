@@ -156,10 +156,12 @@ const eventSchema = new Schema<IEvent>(
   }
 );
 
-// Index for searching events by date and category
-eventSchema.index({ date: 1, category: 1 });
-eventSchema.index({ organizerId: 1 });
-eventSchema.index({ tags: 1 });
+// Indexes for optimized performance
+eventSchema.index({ date: 1, category: 1 }); // For filtering by date and category
+eventSchema.index({ organizerId: 1 }); // For finding events by organizer
+eventSchema.index({ tags: 1 }); // For searching by tags
+eventSchema.index({ moderationStatus: 1, date: 1 }); // For approved events sorted by date
+eventSchema.index({ title: 'text', description: 'text', location: 'text' }); // For text search
 
 const Event = mongoose.model<IEvent>('Event', eventSchema);
 

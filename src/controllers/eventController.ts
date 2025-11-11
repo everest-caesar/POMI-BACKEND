@@ -106,14 +106,17 @@ export const getEvents = async (req: Request, res: Response) => {
       ];
     }
 
-    const events = await Event.find(filter)
-      .limit(Number(limit))
-      .skip(Number(skip))
-      .sort({ date: 1 })
-      .populate('organizerId', 'username email')
-      .populate('attendees', 'username');
-
-    const total = await Event.countDocuments(filter);
+    const [events, total] = await Promise.all([
+      Event.find(filter)
+        .select('title description location date startTime endTime category organizer organizerId attendees maxAttendees price isFree ticketLink socialMediaLink moderationStatus')
+        .limit(Number(limit))
+        .skip(Number(skip))
+        .sort({ date: 1 })
+        .populate('organizerId', 'username email')
+        .populate('attendees', 'username')
+        .lean(),
+      Event.countDocuments(filter),
+    ]);
 
     res.status(200).json({
       events,
