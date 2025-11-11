@@ -8,6 +8,7 @@ import {
   getAdminListings,
   updateEventStatus,
   updateListingStatus,
+  getAdminUsers,
 } from '../controllers/admin.controller.js';
 
 const router = Router();
@@ -21,5 +22,6 @@ router.get('/businesses', getAdminBusinesses);
 router.patch('/businesses/:id/status', updateBusinessStatus);
 router.get('/marketplace', getAdminListings);
 router.patch('/marketplace/:id/status', updateListingStatus);
+router.get('/users', getAdminUsers);
 
 export default router;
