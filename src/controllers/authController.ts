@@ -159,37 +159,9 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.toLowerCase();
-    const adminEmail = ADMIN_EMAIL;
-    const adminPassword = ADMIN_PASSWORD;
-
-    if (adminEmail && adminPassword && normalizedEmail === adminEmail) {
-      if (password !== adminPassword) {
-        return res.status(401).json({ error: 'Invalid email or password' });
-      }
-
-      const adminUser = await ensureAdminAccount({
-        email: adminEmail,
-        password: adminPassword,
-        name: ADMIN_NAME,
-        area: ADMIN_AREA,
-        workOrSchool: ADMIN_WORK,
-      });
-
-      const token = generateToken(adminUser._id.toString());
-
-      return res.status(200).json({
-        message: 'Login successful',
-        token,
-        user: {
-          _id: adminUser._id,
-          email: adminUser.email,
-          username: adminUser.username,
-          createdAt: adminUser.createdAt,
-          ...(adminUser.age !== undefined && adminUser.age !== null ? { age: adminUser.age } : {}),
-          ...(adminUser.area ? { area: adminUser.area } : {}),
-          ...(adminUser.workOrSchool ? { workOrSchool: adminUser.workOrSchool } : {}),
-          isAdmin: true,
-        },
+    if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL) {
+      return res.status(403).json({
+        error: 'Please use the secure admin console to sign in with this credential.',
       });
     }
 
@@ -203,13 +175,6 @@ export const login = async (req: Request, res: Response) => {
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Check if user should be an admin based on their isAdmin field OR email match
-    const shouldBeAdmin = user.isAdmin || Boolean(adminEmail && normalizedEmail === adminEmail);
-    if (user.isAdmin !== shouldBeAdmin) {
-      user.isAdmin = shouldBeAdmin;
-      await user.save();
     }
 
     // Generate token
@@ -235,6 +200,60 @@ export const login = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+};
+
+export const adminLogin = async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+      return res.status(503).json({ error: 'Admin authentication is not configured.' });
+    }
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+
+    if (normalizedEmail !== ADMIN_EMAIL) {
+      return res.status(403).json({
+        error: 'This route is reserved for the designated Pomi admin credential.',
+      });
+    }
+
+    if (password !== ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const adminUser = await ensureAdminAccount({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      name: ADMIN_NAME,
+      area: ADMIN_AREA,
+      workOrSchool: ADMIN_WORK,
+    });
+
+    const token = generateToken(adminUser._id.toString());
+
+    return res.status(200).json({
+      message: 'Admin login successful',
+      token,
+      user: {
+        _id: adminUser._id,
+        email: adminUser.email,
+        username: adminUser.username,
+        createdAt: adminUser.createdAt,
+        ...(adminUser.age !== undefined && adminUser.age !== null ? { age: adminUser.age } : {}),
+        ...(adminUser.area ? { area: adminUser.area } : {}),
+        ...(adminUser.workOrSchool ? { workOrSchool: adminUser.workOrSchool } : {}),
+        isAdmin: true,
+      },
+    });
+  } catch (error: any) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ error: 'Admin login failed' });
   }
 };
 

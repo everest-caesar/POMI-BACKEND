@@ -1,8 +1,14 @@
-import axios from 'axios';
+import sgMail from '@sendgrid/mail';
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'marakihay@gmail.com';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'marakihay@gmail.com';
+
+if (SENDGRID_API_KEY) {
+  sgMail.setApiKey(SENDGRID_API_KEY);
+} else {
+  console.warn('⚠️  SENDGRID_API_KEY not configured. Emails will not be sent.');
+}
 
 interface SendEmailOptions {
   to: string;
@@ -21,42 +27,21 @@ const sendEmail = async (options: SendEmailOptions): Promise<boolean> => {
   }
 
   try {
-    const response = await axios.post(
-      'https://api.sendgrid.com/v3/mail/send',
-      {
-        personalizations: [
-          {
-            to: [
-              {
-                email: options.to,
-              },
-            ],
-            subject: options.subject,
-          },
-        ],
-        from: {
-          email: options.from || FROM_EMAIL,
-          name: 'Pomi Community',
-        },
-        content: [
-          {
-            type: 'text/html',
-            value: options.html,
-          },
-        ],
+    await sgMail.send({
+      to: options.to,
+      from: {
+        email: options.from || FROM_EMAIL,
+        name: 'Pomi Community',
       },
-      {
-        headers: {
-          Authorization: `Bearer ${SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+      subject: options.subject,
+      html: options.html,
+    });
 
     console.log(`✅ Email sent to ${options.to}`);
     return true;
   } catch (error: any) {
-    console.error('❌ Failed to send email:', error.response?.data || error.message);
+    const sendGridErrors = error?.response?.body || error?.response?.data;
+    console.error('❌ Failed to send email:', sendGridErrors || error.message || error);
     return false;
   }
 };

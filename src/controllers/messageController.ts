@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import mongoose from 'mongoose';
+import mongoose, { PipelineStage } from 'mongoose';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
@@ -185,16 +185,29 @@ export const getConversations = async (
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Get all unique users this person has messaged
-    const conversations = await Message.aggregate([
+    const mapConversation = (conv: any, includeListing = false) => ({
+      userId:
+        typeof conv._id === 'object' && conv._id?.toString
+          ? conv._id.toString()
+          : conv._id,
+      userName: conv.otherUserName,
+      lastMessage: conv.lastMessage,
+      lastMessageTime: conv.lastMessageTime,
+      unreadCount: conv.unreadCount ?? 0,
+      hasListing: includeListing ? Boolean(conv.hasListing) : false,
+      lastListingId:
+        includeListing && conv.lastListingId && conv.lastListingId.toString
+          ? conv.lastListingId.toString()
+          : null,
+    });
+
+    const primaryPipeline = ([
       {
         $match: {
           $or: [{ senderId: userObjectId }, { recipientId: userObjectId }],
         },
       },
-      {
-        $sort: { createdAt: -1 },
-      },
+      { $sort: { createdAt: -1 as 1 | -1 } },
       {
         $group: {
           _id: {
@@ -203,14 +216,14 @@ export const getConversations = async (
               '$recipientId',
               '$senderId',
             ],
-          } as any,
+          },
           otherUserName: {
             $cond: [
               { $eq: ['$senderId', userObjectId] },
               '$recipientName',
               '$senderName',
             ],
-          } as any,
+          },
           lastMessage: { $first: '$content' },
           lastMessageTime: { $first: '$createdAt' },
           lastListingId: { $first: '$listingId' },
@@ -231,26 +244,79 @@ export const getConversations = async (
                 1,
                 0,
               ],
-            } as any,
+            },
           },
         },
       },
-      {
-        $sort: { lastMessageTime: -1 },
-      },
-    ]) as any;
+      { $sort: { lastMessageTime: -1 as 1 | -1 } },
+    ]) as PipelineStage[];
 
-    res.status(200).json({
-      data: conversations.map((conv) => ({
-        userId: conv._id,
-        userName: conv.otherUserName,
-        lastMessage: conv.lastMessage,
-        lastMessageTime: conv.lastMessageTime,
-        unreadCount: conv.unreadCount,
-        hasListing: Boolean(conv.hasListing),
-        lastListingId: conv.lastListingId ? conv.lastListingId.toString() : null,
-      })),
-    });
+    const fallbackPipeline = ([
+      {
+        $match: {
+          $or: [{ senderId: userId }, { recipientId: userId }],
+        },
+      },
+      { $sort: { createdAt: -1 as 1 | -1 } },
+      {
+        $group: {
+          _id: {
+            $cond: [
+              { $eq: ['$senderId', userId] },
+              '$recipientId',
+              '$senderId',
+            ],
+          },
+          otherUserName: {
+            $cond: [
+              { $eq: ['$senderId', userId] },
+              '$recipientName',
+              '$senderName',
+            ],
+          },
+          lastMessage: { $first: '$content' },
+          lastMessageTime: { $first: '$createdAt' },
+          unreadCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$recipientId', userId] },
+                    { $eq: ['$isRead', false] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { lastMessageTime: -1 as 1 | -1 } },
+    ]) as PipelineStage[];
+
+    try {
+      const conversations = (await Message.aggregate(primaryPipeline)) as any[];
+      res.status(200).json({
+        data: conversations.map((conv) => mapConversation(conv, true)),
+      });
+      return;
+    } catch (primaryError) {
+      console.error('Get conversations pipeline error:', primaryError);
+    }
+
+    try {
+      const fallbackConversations = (await Message.aggregate(
+        fallbackPipeline
+      )) as any[];
+
+      res.status(200).json({
+        data: fallbackConversations.map((conv) => mapConversation(conv, false)),
+      });
+    } catch (fallbackError) {
+      console.error('Get conversations fallback error:', fallbackError);
+      res.status(500).json({ error: 'Failed to fetch conversations' });
+    }
   } catch (error: any) {
     console.error('Get conversations error:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
