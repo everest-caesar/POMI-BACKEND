@@ -172,14 +172,14 @@ export const getConversations = async (
               '$recipientId',
               '$senderId',
             ],
-          },
+          } as any,
           otherUserName: {
             $cond: [
               { $eq: ['$senderId', userId] },
               '$recipientName',
               '$senderName',
             ],
-          },
+          } as any,
           lastMessage: { $last: '$content' },
           lastMessageTime: { $last: '$createdAt' },
           unreadCount: {
@@ -194,14 +194,14 @@ export const getConversations = async (
                 1,
                 0,
               ],
-            },
+            } as any,
           },
         },
       },
       {
         $sort: { lastMessageTime: -1 },
       },
-    ]);
+    ]) as any;
 
     res.status(200).json({
       data: conversations.map((conv) => ({

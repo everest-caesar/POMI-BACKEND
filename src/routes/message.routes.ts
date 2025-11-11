@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authMiddleware } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 import {
   sendMessage,
   getConversation,
@@ -11,7 +11,7 @@ import {
 const router = Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate);
 
 // Send a message
 router.post('/', sendMessage);
