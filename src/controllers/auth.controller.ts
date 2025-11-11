@@ -8,6 +8,7 @@ import {
   validateLogin,
 } from '../validators/auth.js';
 import User from '../models/User.js';
+import emailService from '../services/emailService.js';
 
 const OTTAWA_AREAS = [
   'Downtown Ottawa',
@@ -168,6 +169,12 @@ export const register = async (
     }
 
     console.log('📤 Registration response:', { isAdmin: userResponse.isAdmin });
+
+    // Send welcome email (fire and forget - don't wait for it)
+    emailService.sendWelcomeEmail(newUser.email, newUser.username).catch((err) => {
+      console.error('Failed to send welcome email:', err);
+      // Don't fail registration if email fails
+    });
 
     res.status(201).json({
       message: 'User registered successfully',

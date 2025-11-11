@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Event from '../models/Event.js';
 import User from '../models/User.js';
+import emailService from '../services/emailService.js';
 
 // Create event
 export const createEvent = async (req: Request, res: Response) => {
@@ -51,6 +52,19 @@ export const createEvent = async (req: Request, res: Response) => {
     });
 
     await newEvent.save();
+
+    // Send admin notification email for non-admin event creation (fire and forget)
+    if (!isAdmin) {
+      emailService.sendEventCreationNotification(
+        title,
+        new Date(date).toLocaleDateString('en-CA'),
+        user.username,
+        user.email
+      ).catch((err) => {
+        console.error('Failed to send event notification email:', err);
+        // Don't fail event creation if email fails
+      });
+    }
 
     res.status(201).json({
       message: isAdmin
