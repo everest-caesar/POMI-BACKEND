@@ -7,6 +7,7 @@ import forumRoutes from './forum.routes.js';
 import mentorshipRoutes from './mentorship.routes.js';
 import communityRoutes from './community.routes.js';
 import adminRoutes from './admin.routes.js';
+import messageRoutes from './message.routes.js';
 const router = Router();
 // API v1 routes
 router.use('/auth', authRoutes);
@@ -17,6 +18,7 @@ router.use('/forums', forumRoutes);
 router.use('/mentorship', mentorshipRoutes);
 router.use('/community', communityRoutes);
 router.use('/admin', adminRoutes);
+router.use('/messages', messageRoutes);
 // Status endpoint
 router.get('/status', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });

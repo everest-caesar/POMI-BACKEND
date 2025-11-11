@@ -1,15 +1,16 @@
 import Event from '../models/Event.js';
 import User from '../models/User.js';
+import emailService from '../services/emailService.js';
 // Create event
 export const createEvent = async (req, res) => {
     try {
-        const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags } = req.body;
+        const { title, description, location, date, startTime, endTime, category, maxAttendees, image, tags, price, ticketLink, socialMediaLink } = req.body;
         const userId = req.userId;
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
         // Validation
-        if (!title || !description || !location || !date || !startTime || !endTime) {
+        if (!title || !description || !location || !date || !startTime || !endTime || !ticketLink) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
         // Fetch user to get organizer name
@@ -17,7 +18,10 @@ export const createEvent = async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
+        // Determine if user is admin
+        const isAdmin = Boolean(user.isAdmin);
         // Create event
+        const eventPrice = price ? parseFloat(price) : 0;
         const newEvent = new Event({
             title,
             description,
@@ -31,11 +35,27 @@ export const createEvent = async (req, res) => {
             maxAttendees,
             image,
             tags: tags || [],
+            price: eventPrice,
+            isFree: eventPrice === 0,
+            ticketLink,
+            socialMediaLink,
             attendees: [userId], // Organizer is first attendee
+            moderationStatus: isAdmin ? 'approved' : 'pending', // Auto-approve for admins, pending for users
+            reviewedBy: isAdmin ? userId : undefined,
+            reviewedAt: isAdmin ? new Date() : undefined,
         });
         await newEvent.save();
+        // Send admin notification email for non-admin event creation (fire and forget)
+        if (!isAdmin) {
+            emailService.sendEventCreationNotification(title, new Date(date).toLocaleDateString('en-CA'), user.username, user.email).catch((err) => {
+                console.error('Failed to send event notification email:', err);
+                // Don't fail event creation if email fails
+            });
+        }
         res.status(201).json({
-            message: 'Event created successfully',
+            message: isAdmin
+                ? 'Event published successfully.'
+                : 'Event submitted for review. An admin will approve it shortly.',
             event: newEvent,
         });
     }
@@ -48,7 +68,14 @@ export const createEvent = async (req, res) => {
 export const getEvents = async (req, res) => {
     try {
         const { category, search, limit = 10, skip = 0 } = req.query;
+        const userId = req.userId;
+        const user = userId ? await User.findById(userId) : null;
+        const isAdmin = Boolean(user?.isAdmin);
         const filter = { date: { $gte: new Date() } }; // Only future events
+        // Only show approved events to regular users, all events to admins
+        if (!isAdmin) {
+            filter.moderationStatus = 'approved';
+        }
         if (category) {
             filter.category = category;
         }
@@ -59,13 +86,17 @@ export const getEvents = async (req, res) => {
                 { location: { $regex: search, $options: 'i' } },
             ];
         }
-        const events = await Event.find(filter)
-            .limit(Number(limit))
-            .skip(Number(skip))
-            .sort({ date: 1 })
-            .populate('organizerId', 'username email')
-            .populate('attendees', 'username');
-        const total = await Event.countDocuments(filter);
+        const [events, total] = await Promise.all([
+            Event.find(filter)
+                .select('title description location date startTime endTime category organizer organizerId attendees maxAttendees price isFree ticketLink socialMediaLink moderationStatus')
+                .limit(Number(limit))
+                .skip(Number(skip))
+                .sort({ date: 1 })
+                .populate('organizerId', 'username email')
+                .populate('attendees', 'username')
+                .lean(),
+            Event.countDocuments(filter),
+        ]);
         res.status(200).json({
             events,
             pagination: {
@@ -185,7 +216,7 @@ export const rsvpEvent = async (req, res) => {
         }
         // Check if user already attending
         if (event.attendees.includes(userId)) {
-            return res.status(400).json({ error: 'Already attending this event' });
+            return res.status(400).json({ error: 'You have already registered for this event' });
         }
         // Check max attendees
         if (event.maxAttendees && event.attendees.length >= event.maxAttendees) {
@@ -194,7 +225,8 @@ export const rsvpEvent = async (req, res) => {
         event.attendees.push(userId);
         await event.save();
         res.status(200).json({
-            message: 'RSVP successful',
+            message: 'You have successfully registered for this event! 🎉',
+            success: true,
             event,
         });
     }
@@ -217,18 +249,19 @@ export const cancelRsvp = async (req, res) => {
         }
         const index = event.attendees.findIndex((attendee) => attendee.toString() === userId);
         if (index === -1) {
-            return res.status(400).json({ error: 'Not attending this event' });
+            return res.status(400).json({ error: 'You are not registered for this event' });
         }
         event.attendees.splice(index, 1);
         await event.save();
         res.status(200).json({
-            message: 'RSVP cancelled',
+            message: 'You have successfully cancelled your registration for this event.',
+            success: true,
             event,
         });
     }
     catch (error) {
         console.error('Cancel RSVP error:', error);
-        res.status(500).json({ error: 'Failed to cancel RSVP' });
+        res.status(500).json({ error: 'Failed to cancel registration' });
     }
 };
 // Get user's events
@@ -246,6 +279,105 @@ export const getUserEvents = async (req, res) => {
     catch (error) {
         console.error('Get user events error:', error);
         res.status(500).json({ error: 'Failed to fetch user events' });
+    }
+};
+// Get pending events for admin review
+export const getPendingEvents = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Check if user is admin
+        const user = await User.findById(userId);
+        if (!user || !user.isAdmin) {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+        const { limit = 20, skip = 0 } = req.query;
+        const events = await Event.find({ moderationStatus: 'pending' })
+            .limit(Number(limit))
+            .skip(Number(skip))
+            .sort({ createdAt: -1 })
+            .populate('organizerId', 'username email');
+        const total = await Event.countDocuments({ moderationStatus: 'pending' });
+        res.status(200).json({
+            events,
+            pagination: {
+                total,
+                skip: Number(skip),
+                limit: Number(limit),
+                hasMore: Number(skip) + Number(limit) < total,
+            },
+        });
+    }
+    catch (error) {
+        console.error('Get pending events error:', error);
+        res.status(500).json({ error: 'Failed to fetch pending events' });
+    }
+};
+// Approve event (admin only)
+export const approveEvent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Check if user is admin
+        const user = await User.findById(userId);
+        if (!user || !user.isAdmin) {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+        const event = await Event.findById(id);
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        event.moderationStatus = 'approved';
+        event.reviewedBy = userId;
+        event.reviewedAt = new Date();
+        event.rejectionReason = null;
+        await event.save();
+        res.status(200).json({
+            message: 'Event approved successfully',
+            event,
+        });
+    }
+    catch (error) {
+        console.error('Approve event error:', error);
+        res.status(500).json({ error: 'Failed to approve event' });
+    }
+};
+// Reject event (admin only)
+export const rejectEvent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { rejectionReason } = req.body;
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        // Check if user is admin
+        const user = await User.findById(userId);
+        if (!user || !user.isAdmin) {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+        const event = await Event.findById(id);
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        event.moderationStatus = 'rejected';
+        event.reviewedBy = userId;
+        event.reviewedAt = new Date();
+        event.rejectionReason = rejectionReason || 'Event rejected by admin';
+        await event.save();
+        res.status(200).json({
+            message: 'Event rejected successfully',
+            event,
+        });
+    }
+    catch (error) {
+        console.error('Reject event error:', error);
+        res.status(500).json({ error: 'Failed to reject event' });
     }
 };
 //# sourceMappingURL=eventController.js.map

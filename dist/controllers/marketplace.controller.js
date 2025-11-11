@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import Listing from '../models/Listing.js';
 import User from '../models/User.js';
 import { uploadImages } from '../services/storageService.js';
+import emailService from '../services/emailService.js';
 /**
  * Create marketplace listing
  * POST /api/v1/marketplace/listings
@@ -42,6 +43,13 @@ export const createListing = async (req, res) => {
             rejectionReason: undefined,
         });
         await listing.save();
+        // Send admin notification email for non-admin listing creation (fire and forget)
+        if (!isAdmin) {
+            emailService.sendListingSubmissionNotification(title, price, user.username, user.email).catch((err) => {
+                console.error('Failed to send listing notification email:', err);
+                // Don't fail listing creation if email fails
+            });
+        }
         res.status(201).json({
             message: isAdmin
                 ? 'Listing published successfully.'
@@ -276,7 +284,7 @@ export const favoriteListing = async (req, res) => {
  */
 export const uploadListingImages = async (req, res) => {
     try {
-        const userId = req.userId;
+        const userId = req.userId || req.user?.id;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
             return;

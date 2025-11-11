@@ -18,7 +18,7 @@ export const authenticateToken = (req, res, next) => {
         }
         if (typeof decoded === 'object' && decoded !== null) {
             req.user = {
-                id: decoded.sub || decoded.id,
+                id: decoded.sub || decoded.userId || decoded.id,
                 email: decoded.email,
                 username: decoded.username,
                 isAdmin: decoded.isAdmin || false,
@@ -50,7 +50,7 @@ export const optionalAuth = (req, res, next) => {
         jwt.verify(token, secret, (err, decoded) => {
             if (!err && typeof decoded === 'object' && decoded !== null) {
                 req.user = {
-                    id: decoded.sub || decoded.id,
+                    id: decoded.sub || decoded.userId || decoded.id,
                     email: decoded.email,
                     username: decoded.username,
                     isAdmin: decoded.isAdmin || false,

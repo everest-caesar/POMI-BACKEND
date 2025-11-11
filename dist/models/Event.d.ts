@@ -14,6 +14,11 @@ export interface IEvent extends Document {
     maxAttendees?: number;
     image?: string;
     tags: string[];
+    price?: number;
+    isFree: boolean;
+    stripeProductId?: string;
+    ticketLink?: string;
+    socialMediaLink?: string;
     moderationStatus: 'pending' | 'approved' | 'rejected';
     reviewedBy?: mongoose.Types.ObjectId | null;
     reviewedAt?: Date | null;

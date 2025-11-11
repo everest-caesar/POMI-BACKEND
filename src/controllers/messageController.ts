@@ -1,7 +1,13 @@
 import { Response } from 'express';
+import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
+
+const isValidObjectId = (value?: string): boolean => {
+  if (!value) return false;
+  return mongoose.Types.ObjectId.isValid(value);
+};
 
 /**
  * Send a message
@@ -22,6 +28,16 @@ export const sendMessage = async (
 
     if (!recipientId || !content) {
       res.status(400).json({ error: 'Recipient ID and message content are required' });
+      return;
+    }
+
+    if (!isValidObjectId(recipientId)) {
+      res.status(400).json({ error: 'Invalid recipient ID' });
+      return;
+    }
+
+    if (listingId && !isValidObjectId(listingId)) {
+      res.status(400).json({ error: 'Invalid listing ID' });
       return;
     }
 
@@ -92,7 +108,12 @@ export const getConversation = async (
       return;
     }
 
-    const limitNum = Math.min(parseInt(limit as string) || 50, 100);
+    if (!isValidObjectId(recipientId)) {
+      res.status(400).json({ error: 'Invalid recipient ID' });
+      return;
+    }
+
+    const limitNum = Math.min(parseInt(limit as string, 10) || 50, 100);
     const skipNum = parseInt(skip as string) || 0;
 
     // Get messages between these two users
@@ -157,37 +178,53 @@ export const getConversations = async (
       return;
     }
 
+    if (!isValidObjectId(userId)) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
     // Get all unique users this person has messaged
     const conversations = await Message.aggregate([
       {
         $match: {
-          $or: [{ senderId: userId }, { recipientId: userId }],
+          $or: [{ senderId: userObjectId }, { recipientId: userObjectId }],
         },
+      },
+      {
+        $sort: { createdAt: -1 },
       },
       {
         $group: {
           _id: {
             $cond: [
-              { $eq: ['$senderId', userId] },
+              { $eq: ['$senderId', userObjectId] },
               '$recipientId',
               '$senderId',
             ],
           } as any,
           otherUserName: {
             $cond: [
-              { $eq: ['$senderId', userId] },
+              { $eq: ['$senderId', userObjectId] },
               '$recipientName',
               '$senderName',
             ],
           } as any,
-          lastMessage: { $last: '$content' },
-          lastMessageTime: { $last: '$createdAt' },
+          lastMessage: { $first: '$content' },
+          lastMessageTime: { $first: '$createdAt' },
+          lastListingId: { $first: '$listingId' },
+          hasListing: {
+            $max: {
+              $cond: [{ $ifNull: ['$listingId', false] }, 1, 0],
+            },
+          },
           unreadCount: {
             $sum: {
               $cond: [
                 {
                   $and: [
-                    { $eq: ['$recipientId', userId] },
+                    { $eq: ['$recipientId', userObjectId] },
                     { $eq: ['$isRead', false] },
                   ],
                 },
@@ -210,6 +247,8 @@ export const getConversations = async (
         lastMessage: conv.lastMessage,
         lastMessageTime: conv.lastMessageTime,
         unreadCount: conv.unreadCount,
+        hasListing: Boolean(conv.hasListing),
+        lastListingId: conv.lastListingId ? conv.lastListingId.toString() : null,
       })),
     });
   } catch (error: any) {
@@ -231,6 +270,11 @@ export const getUnreadCount = async (
 
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!isValidObjectId(userId)) {
+      res.status(400).json({ error: 'Invalid user ID' });
       return;
     }
 
@@ -260,6 +304,11 @@ export const markAsRead = async (
 
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!isValidObjectId(messageId)) {
+      res.status(400).json({ error: 'Invalid message ID' });
       return;
     }
 

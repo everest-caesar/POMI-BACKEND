@@ -12,6 +12,8 @@ export interface IBusiness extends Document {
     verified: boolean;
     rating?: number;
     views?: number;
+    images?: string[];
+    featuredImage?: string;
     createdAt: Date;
     updatedAt: Date;
 }

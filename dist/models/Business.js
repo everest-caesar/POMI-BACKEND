@@ -74,6 +74,14 @@ const businessSchema = new Schema({
         type: Number,
         default: 0,
     },
+    images: {
+        type: [String],
+        default: [],
+    },
+    featuredImage: {
+        type: String,
+        default: null,
+    },
 }, {
     timestamps: true,
 });

@@ -300,4 +300,49 @@ export const updateListingStatus = async (req, res) => {
         res.status(500).json({ error: 'Failed to update listing status' });
     }
 };
+export const getAdminUsers = async (req, res) => {
+    try {
+        const { limit = 50, skip = 0, search } = req.query;
+        const limitNum = Math.min(parseInt(limit) || 50, 100);
+        const skipNum = parseInt(skip) || 0;
+        const filter = {};
+        // Search by username or email
+        if (search) {
+            filter.$or = [
+                { username: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+            ];
+        }
+        const [users, total] = await Promise.all([
+            User.find(filter)
+                .select('_id username email area workOrSchool age isAdmin createdAt')
+                .sort({ createdAt: -1 })
+                .limit(limitNum)
+                .skip(skipNum),
+            User.countDocuments(filter),
+        ]);
+        const formattedUsers = users.map((user) => ({
+            id: user._id.toString(),
+            username: user.username,
+            email: user.email,
+            area: user.area,
+            workOrSchool: user.workOrSchool,
+            age: user.age,
+            isAdmin: user.isAdmin,
+            joinedAt: user.createdAt,
+        }));
+        res.status(200).json({
+            users: formattedUsers,
+            pagination: {
+                total,
+                limit: limitNum,
+                skip: skipNum,
+            },
+        });
+    }
+    catch (error) {
+        console.error('Admin users error:', error);
+        res.status(500).json({ error: 'Failed to load community members' });
+    }
+};
 //# sourceMappingURL=admin.controller.js.map

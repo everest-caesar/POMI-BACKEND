@@ -1,11 +1,11 @@
 import AWS from 'aws-sdk';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-const { S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL, AWS_REGION, } = process.env;
+const { S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, } = process.env;
 const isCustomEndpoint = Boolean(S3_ENDPOINT);
 const s3Config = {
-    accessKeyId: S3_ACCESS_KEY || 'pomi_user',
-    secretAccessKey: S3_SECRET_KEY || 'pomi_password',
+    accessKeyId: AWS_ACCESS_KEY_ID || S3_ACCESS_KEY || 'pomi_user',
+    secretAccessKey: AWS_SECRET_ACCESS_KEY || S3_SECRET_KEY || 'pomi_password',
     signatureVersion: 'v4',
     region: AWS_REGION || 'us-east-1',
 };
@@ -16,6 +16,10 @@ if (isCustomEndpoint && S3_ENDPOINT) {
 }
 const s3Client = new AWS.S3(s3Config);
 const BUCKET_NAME = S3_BUCKET || 'marketplace';
+// Use same bucket with folder prefixes instead of separate buckets
+const BUSINESS_BUCKET_NAME = BUCKET_NAME;
+// Check if using AWS (not MinIO)
+const isUsingAWS = process.env.AWS_ACCESS_KEY_ID && !process.env.S3_ENDPOINT;
 const isBucketMissingError = (error) => {
     if (!error)
         return false;
@@ -31,26 +35,26 @@ const isBucketMissingError = (error) => {
 };
 const trimLeadingSlash = (value) => value.replace(/^\/+/, '');
 const trimTrailingSlash = (value) => value.replace(/\/+$/, '');
-const buildPublicUrl = (key) => {
+const buildPublicUrl = (key, bucketName = BUCKET_NAME) => {
     if (S3_PUBLIC_URL) {
         const baseUrl = trimTrailingSlash(S3_PUBLIC_URL);
         if (baseUrl.includes('{key}')) {
-            return baseUrl.replace('{bucket}', BUCKET_NAME).replace('{key}', key);
+            return baseUrl.replace('{bucket}', bucketName).replace('{key}', key);
         }
         if (baseUrl.includes('{bucket}')) {
-            const replaced = baseUrl.replace('{bucket}', BUCKET_NAME);
+            const replaced = baseUrl.replace('{bucket}', bucketName);
             return `${trimTrailingSlash(replaced)}/${key}`;
         }
-        const withBucket = baseUrl.endsWith(`/${BUCKET_NAME}`) || baseUrl.includes(`${BUCKET_NAME}.`)
+        const withBucket = baseUrl.endsWith(`/${bucketName}`) || baseUrl.includes(`${bucketName}.`)
             ? baseUrl
-            : `${baseUrl}/${BUCKET_NAME}`;
+            : `${baseUrl}/${bucketName}`;
         return `${trimTrailingSlash(withBucket)}/${key}`;
     }
     if (isCustomEndpoint && S3_ENDPOINT) {
-        return `${trimTrailingSlash(S3_ENDPOINT)}/${BUCKET_NAME}/${key}`;
+        return `${trimTrailingSlash(S3_ENDPOINT)}/${bucketName}/${key}`;
     }
     const region = AWS_REGION || 'us-east-1';
-    return `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${key}`;
+    return `https://${bucketName}.s3.${region}.amazonaws.com/${key}`;
 };
 const extractObjectKey = (imageUrl) => {
     try {
@@ -73,18 +77,24 @@ const extractObjectKey = (imageUrl) => {
     }
 };
 /**
- * Initialize bucket (run once on startup)
+ * Generic bucket initialization function
  */
-export const initializeBucket = async () => {
+const initializeBucketByName = async (bucketName) => {
     try {
-        await s3Client.headBucket({ Bucket: BUCKET_NAME }).promise();
-        console.log(`✅ Bucket "${BUCKET_NAME}" exists`);
+        await s3Client.headBucket({ Bucket: bucketName }).promise();
+        console.log(`✅ Bucket "${bucketName}" exists and is accessible`);
     }
     catch (error) {
         if (isBucketMissingError(error)) {
+            // Skip creation if using AWS (production) - bucket must exist already
+            if (isUsingAWS) {
+                console.warn(`⚠️  Bucket "${bucketName}" not found. In production AWS, ensure bucket exists and IAM user has access.`);
+                return;
+            }
+            // Only try to create buckets for MinIO (development)
             try {
-                await s3Client.createBucket({ Bucket: BUCKET_NAME }).promise();
-                console.log(`✅ Created bucket "${BUCKET_NAME}"`);
+                await s3Client.createBucket({ Bucket: bucketName }).promise();
+                console.log(`✅ Created bucket "${bucketName}"`);
                 // Make bucket public for listing images
                 const publicPolicy = {
                     Version: '2012-10-17',
@@ -93,21 +103,21 @@ export const initializeBucket = async () => {
                             Effect: 'Allow',
                             Principal: '*',
                             Action: ['s3:GetObject'],
-                            Resource: `arn:aws:s3:::${BUCKET_NAME}/*`,
+                            Resource: `arn:aws:s3:::${bucketName}/*`,
                         },
                     ],
                 };
                 await s3Client
                     .putBucketPolicy({
-                    Bucket: BUCKET_NAME,
+                    Bucket: bucketName,
                     Policy: JSON.stringify(publicPolicy),
                 })
                     .promise();
-                console.log(`✅ Set public policy for "${BUCKET_NAME}"`);
+                console.log(`✅ Set public policy for "${bucketName}"`);
             }
             catch (createError) {
                 if (createError.code === 'BucketAlreadyOwnedByYou' || createError.code === 'BucketAlreadyExists') {
-                    console.log(`ℹ️  Bucket "${BUCKET_NAME}" already exists and is owned by the configured user.`);
+                    console.log(`ℹ️  Bucket "${bucketName}" already exists and is owned by the configured user.`);
                 }
                 else {
                     console.error('❌ Failed to create bucket:', createError);
@@ -120,6 +130,18 @@ export const initializeBucket = async () => {
             throw error;
         }
     }
+};
+/**
+ * Initialize bucket (run once on startup)
+ */
+export const initializeBucket = async () => {
+    await initializeBucketByName(BUCKET_NAME);
+};
+/**
+ * Initialize business bucket (run once on startup)
+ */
+export const initializeBusinessBucket = async () => {
+    await initializeBucketByName(BUSINESS_BUCKET_NAME);
 };
 /**
  * Upload image to MinIO/S3
@@ -160,6 +182,42 @@ export const uploadImage = async (file, folder = 'marketplace', attempt = 0) => 
     }
 };
 /**
+ * Upload image to business folder within same bucket
+ * Uses folder prefix instead of separate bucket for production AWS compatibility
+ * @param file - File buffer and metadata
+ * @param attempt - Retry attempt number
+ * @returns Public URL of uploaded image
+ */
+export const uploadBusinessImage = async (file, attempt = 0) => {
+    try {
+        // Generate unique filename with businesses folder prefix
+        const extension = (path.extname(file.originalname) || '.bin').toLowerCase();
+        const objectKey = `businesses/${uuidv4()}${extension}`;
+        // Upload to same bucket but with businesses/ prefix
+        await s3Client
+            .putObject({
+            Bucket: BUCKET_NAME,
+            Key: objectKey,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+        })
+            .promise();
+        // Generate public URL using main bucket name (objectKey includes businesses/ prefix)
+        const publicUrl = buildPublicUrl(objectKey, BUCKET_NAME);
+        console.log(`✅ Business image uploaded: ${publicUrl}`);
+        return publicUrl;
+    }
+    catch (error) {
+        if (isBucketMissingError(error) && attempt < MAX_UPLOAD_RETRY) {
+            console.warn(`⚠️  Bucket "${BUCKET_NAME}" missing during upload. Attempting to initialize and retry...`);
+            await initializeBucket();
+            return uploadBusinessImage(file, attempt + 1);
+        }
+        console.error('❌ Business image upload error:', error);
+        throw new Error(error?.message || 'Failed to upload image');
+    }
+};
+/**
  * Upload multiple images
  */
 export const uploadImages = async (files, folder = 'marketplace') => {
@@ -170,6 +228,21 @@ export const uploadImages = async (files, folder = 'marketplace') => {
     }
     catch (error) {
         console.error('❌ Batch upload error:', error);
+        throw error;
+    }
+};
+/**
+ * Upload multiple images to business folder within same bucket
+ * Each file gets businesses/ prefix, compatible with production AWS
+ */
+export const uploadBusinessImages = async (files) => {
+    try {
+        const uploadPromises = files.map((file) => uploadBusinessImage(file));
+        const urls = await Promise.all(uploadPromises);
+        return urls;
+    }
+    catch (error) {
+        console.error('❌ Business batch upload error:', error);
         throw error;
     }
 };
@@ -207,8 +280,11 @@ export const deleteImages = async (imageUrls) => {
 };
 export default {
     initializeBucket,
+    initializeBusinessBucket,
     uploadImage,
     uploadImages,
+    uploadBusinessImage,
+    uploadBusinessImages,
     deleteImage,
     deleteImages,
 };

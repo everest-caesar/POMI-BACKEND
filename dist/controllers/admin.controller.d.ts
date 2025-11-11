@@ -7,4 +7,5 @@ export declare const updateBusinessStatus: (req: AuthRequest, res: Response) => 
 export declare const getAdminListings: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateEventStatus: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateListingStatus: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getAdminUsers: (req: AuthRequest, res: Response) => Promise<void>;
 //# sourceMappingURL=admin.controller.d.ts.map

@@ -1,9 +1,11 @@
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import app from './app.js';
 import { initializeBucket, initializeBusinessBucket } from './services/storageService.js';
 
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Create HTTP server for Socket.io
 const server = http.createServer(app);
@@ -19,37 +21,64 @@ const io = new SocketIOServer(server, {
 
 // Store active connections (userId -> socket.id mapping)
 const activeUsers = new Map<string, Set<string>>();
+const socketUserMap = new Map<string, string>();
 
 // Socket.io connection handler
 io.on('connection', (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
   // Authenticate socket connection with userId
-  socket.on('authenticate', (userId: string) => {
-    if (!userId) {
+  socket.on('authenticate', (payload: { token?: string }) => {
+    try {
+      const token = payload?.token;
+      if (!token) {
+        socket.emit('auth:error', 'Missing authentication token');
+        socket.disconnect();
+        return;
+      }
+
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+      const userId = decoded?.userId;
+
+      if (!userId) {
+        socket.emit('auth:error', 'Invalid authentication token');
+        socket.disconnect();
+        return;
+      }
+
+      // Store user's socket connection
+      if (!activeUsers.has(userId)) {
+        activeUsers.set(userId, new Set());
+      }
+      activeUsers.get(userId)!.add(socket.id);
+      socketUserMap.set(socket.id, userId);
+
+      socket.emit('auth:success');
+
+      // Notify others that this user is online
+      socket.broadcast.emit('user:online', { userId });
+
+      console.log(`👤 User authenticated: ${userId} (${socket.id})`);
+    } catch (error) {
+      console.error('Socket authentication failed:', error);
+      socket.emit('auth:error', 'Authentication failed');
       socket.disconnect();
-      return;
     }
-
-    // Store user's socket connection
-    if (!activeUsers.has(userId)) {
-      activeUsers.set(userId, new Set());
-    }
-    activeUsers.get(userId)!.add(socket.id);
-
-    // Notify others that this user is online
-    socket.broadcast.emit('user:online', { userId });
-
-    console.log(`👤 User authenticated: ${userId} (${socket.id})`);
   });
 
   // Handle incoming messages
   socket.on('message:send', (data: { recipientId: string; content: string; listingId?: string }) => {
-    const senderId = Array.from(activeUsers.entries()).find((entry) =>
-      entry[1].has(socket.id)
-    )?.[0];
+    const senderId = socketUserMap.get(socket.id);
 
-    if (!senderId) return;
+    if (!senderId) {
+      socket.emit('auth:error', 'Authentication required');
+      return;
+    }
+
+    if (!data?.recipientId || !data?.content) {
+      socket.emit('message:error', { message: 'Recipient and content are required' });
+      return;
+    }
 
     // Emit to recipient(s) if they're connected
     const recipientSockets = activeUsers.get(data.recipientId);
@@ -61,20 +90,16 @@ io.on('connection', (socket) => {
           listingId: data.listingId,
           timestamp: new Date(),
         });
+        io.to(socketId).emit('typing:stop', { userId: senderId });
       });
     }
-
-    // Also emit typing stopped
-    socket.broadcast.emit('typing:stopped', { userId: senderId });
   });
 
   // Handle typing indicator
   socket.on('typing:start', (data: { recipientId: string }) => {
-    const senderId = Array.from(activeUsers.entries()).find((entry) =>
-      entry[1].has(socket.id)
-    )?.[0];
+    const senderId = socketUserMap.get(socket.id);
 
-    if (!senderId) return;
+    if (!senderId || !data?.recipientId) return;
 
     const recipientSockets = activeUsers.get(data.recipientId);
     if (recipientSockets) {
@@ -85,11 +110,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('typing:stop', (data: { recipientId: string }) => {
-    const senderId = Array.from(activeUsers.entries()).find((entry) =>
-      entry[1].has(socket.id)
-    )?.[0];
+    const senderId = socketUserMap.get(socket.id);
 
-    if (!senderId) return;
+    if (!senderId || !data?.recipientId) return;
 
     const recipientSockets = activeUsers.get(data.recipientId);
     if (recipientSockets) {
@@ -101,22 +124,19 @@ io.on('connection', (socket) => {
 
   // Handle disconnect
   socket.on('disconnect', () => {
-    let disconnectUserId: string | undefined;
+    const userId = socketUserMap.get(socket.id);
+    socketUserMap.delete(socket.id);
 
-    // Remove socket from active users
-    for (const [userId, sockets] of activeUsers.entries()) {
-      if (sockets.has(socket.id)) {
+    if (userId) {
+      const sockets = activeUsers.get(userId);
+      if (sockets) {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
           activeUsers.delete(userId);
-          disconnectUserId = userId;
+          socket.broadcast.emit('user:offline', { userId });
+          console.log(`👋 User disconnected: ${userId}`);
         }
       }
-    }
-
-    if (disconnectUserId) {
-      socket.broadcast.emit('user:offline', { userId: disconnectUserId });
-      console.log(`👋 User disconnected: ${disconnectUserId}`);
     }
   });
 });

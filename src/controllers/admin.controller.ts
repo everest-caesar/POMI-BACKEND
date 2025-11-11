@@ -70,9 +70,16 @@ export const getAdminEvents = async (req: AuthRequest, res: Response) => {
     const formattedEvents = events.map((event) => ({
       id: event._id.toString(),
       title: event.title,
+      description: event.description,
       date: event.date,
+      startTime: event.startTime,
+      endTime: event.endTime,
       category: event.category,
       location: event.location,
+      maxAttendees: event.maxAttendees ?? null,
+      tags: event.tags || [],
+      price: typeof event.price === 'number' ? event.price : null,
+      isFree: event.isFree,
       organizer: event.organizer,
       organizerProfile: event.organizerId
         ? {
@@ -83,6 +90,9 @@ export const getAdminEvents = async (req: AuthRequest, res: Response) => {
             workOrSchool: (event.organizerId as any).workOrSchool,
           }
         : null,
+      ticketLink: event.ticketLink ?? null,
+      socialMediaLink: event.socialMediaLink ?? null,
+      image: event.image ?? null,
       attendeeCount: event.attendees?.length || 0,
       attendees: (event.attendees || []).map((attendee: any) => ({
         id: attendee._id?.toString(),

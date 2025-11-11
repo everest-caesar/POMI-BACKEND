@@ -1,5 +1,6 @@
 import Business from '../models/Business.js';
 import User from '../models/User.js';
+import { uploadBusinessImages as uploadBusinessImagesToStorage } from '../services/storageService.js';
 /**
  * Create business
  * POST /api/v1/businesses
@@ -7,7 +8,7 @@ import User from '../models/User.js';
 export const createBusiness = async (req, res) => {
     try {
         const { businessName, description, category, phone, email, address } = req.body;
-        const userId = req.userId;
+        const userId = req.user?.id;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
@@ -108,7 +109,7 @@ export const getBusiness = async (req, res) => {
 export const updateBusiness = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.userId;
+        const userId = req.user?.id;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
@@ -145,7 +146,7 @@ export const updateBusiness = async (req, res) => {
 export const deleteBusiness = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.userId;
+        const userId = req.user?.id;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
@@ -192,6 +193,62 @@ export const getBusinessReviews = async (req, res) => {
     catch (error) {
         console.error('Get reviews error:', error);
         res.status(500).json({ error: 'Failed to get reviews' });
+    }
+};
+/**
+ * Upload business images
+ * POST /api/v1/businesses/:id/images
+ */
+export const uploadBusinessImages = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { setAsFeatured } = req.query;
+        const userId = req.user?.id;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        const business = await Business.findById(id);
+        if (!business) {
+            res.status(404).json({ error: 'Business not found' });
+            return;
+        }
+        // Check if user is the owner or admin
+        const user = await User.findById(userId);
+        if (business.ownerId.toString() !== userId && !user?.isAdmin) {
+            res.status(403).json({ error: 'You can only upload images to your own businesses' });
+            return;
+        }
+        // Check if files were uploaded
+        const files = req.files;
+        if (!files || files.length === 0) {
+            res.status(400).json({ error: 'No files uploaded' });
+            return;
+        }
+        // Upload images to business bucket
+        const uploadedImages = await uploadBusinessImagesToStorage(files);
+        if (!uploadedImages || uploadedImages.length === 0) {
+            res.status(500).json({ error: 'Failed to upload images' });
+            return;
+        }
+        // Add images to business
+        business.images = [...(business.images || []), ...uploadedImages];
+        // Set as featured image if specified
+        if (setAsFeatured === 'true' && uploadedImages.length > 0) {
+            business.featuredImage = uploadedImages[0];
+        }
+        else if (!business.featuredImage && uploadedImages.length > 0) {
+            business.featuredImage = uploadedImages[0];
+        }
+        await business.save();
+        res.status(200).json({
+            message: 'Images uploaded successfully',
+            business,
+        });
+    }
+    catch (error) {
+        console.error('Upload business images error:', error);
+        res.status(500).json({ error: 'Failed to upload images' });
     }
 };
 //# sourceMappingURL=business.controller.js.map

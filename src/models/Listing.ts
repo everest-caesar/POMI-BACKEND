@@ -6,7 +6,7 @@ export interface IListing extends Document {
   description: string;
   category: string;
   price: number;
-  location: string;
+  location?: string;
   sellerId: mongoose.Types.ObjectId;
   sellerName: string;
   images: string[];
@@ -48,7 +48,7 @@ const listingSchema = new Schema<IListing>(
     },
     location: {
       type: String,
-      required: [true, 'Location is required'],
+      required: false,
     },
     sellerId: {
       type: Schema.Types.ObjectId,

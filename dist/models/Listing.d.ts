@@ -5,7 +5,7 @@ export interface IListing extends Document {
     description: string;
     category: string;
     price: number;
-    location: string;
+    location?: string;
     sellerId: mongoose.Types.ObjectId;
     sellerName: string;
     images: string[];

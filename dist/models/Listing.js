@@ -24,7 +24,7 @@ const listingSchema = new Schema({
     },
     location: {
         type: String,
-        required: [true, 'Location is required'],
+        required: false,
     },
     sellerId: {
         type: Schema.Types.ObjectId,
