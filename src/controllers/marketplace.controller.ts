@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/authMiddleware.js';
 import Listing from '../models/Listing.js';
 import User from '../models/User.js';
 import { uploadImages } from '../services/storageService.js';
+import emailService from '../services/emailService.js';
 
 /**
  * Create marketplace listing
@@ -53,6 +54,19 @@ export const createListing = async (
     });
 
     await listing.save();
+
+    // Send admin notification email for non-admin listing creation (fire and forget)
+    if (!isAdmin) {
+      emailService.sendListingSubmissionNotification(
+        title,
+        price,
+        user.username,
+        user.email
+      ).catch((err) => {
+        console.error('Failed to send listing notification email:', err);
+        // Don't fail listing creation if email fails
+      });
+    }
 
     res.status(201).json({
       message: isAdmin
