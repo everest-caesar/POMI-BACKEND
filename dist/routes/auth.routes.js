@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, getCurrentUser } from '../controllers/authController.js';
+import { register, login, getCurrentUser, adminLogin } from '../controllers/authController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 const router = Router();
 /**
@@ -16,6 +16,7 @@ router.post('/register', register);
  * @returns { token, user }
  */
 router.post('/login', login);
+router.post('/admin/login', adminLogin);
 /**
  * @route   GET /api/v1/auth/me
  * @desc    Get current logged in user

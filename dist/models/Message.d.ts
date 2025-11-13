@@ -9,6 +9,7 @@ export interface IMessage extends Document {
     content: string;
     isRead: boolean;
     readAt?: Date | null;
+    isAdminMessage: boolean;
     createdAt: Date;
     updatedAt: Date;
 }

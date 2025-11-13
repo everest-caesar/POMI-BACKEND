@@ -10,6 +10,7 @@ export interface IMessage extends Document {
   content: string;
   isRead: boolean;
   readAt?: Date | null;
+  isAdminMessage: boolean; // True if sent by admin to a user
   createdAt: Date;
   updatedAt: Date;
 }
@@ -54,6 +55,11 @@ const messageSchema = new Schema<IMessage>(
     readAt: {
       type: Date,
       default: null,
+    },
+    isAdminMessage: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
   },
   {

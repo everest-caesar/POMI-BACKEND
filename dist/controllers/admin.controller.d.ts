@@ -8,4 +8,19 @@ export declare const getAdminListings: (req: AuthRequest, res: Response) => Prom
 export declare const updateEventStatus: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const updateListingStatus: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const getAdminUsers: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Send admin message to user
+ * POST /api/v1/admin/messages
+ */
+export declare const sendAdminMessage: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Get admin messages (for admin panel view)
+ * GET /api/v1/admin/messages
+ */
+export declare const getAdminMessages: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Broadcast message to all users
+ * POST /api/v1/admin/messages/broadcast
+ */
+export declare const broadcastAdminMessage: (req: AuthRequest, res: Response) => Promise<void>;
 //# sourceMappingURL=admin.controller.d.ts.map

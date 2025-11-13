@@ -39,6 +39,11 @@ const messageSchema = new Schema({
         type: Date,
         default: null,
     },
+    isAdminMessage: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
 }, {
     timestamps: true,
 });

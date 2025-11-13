@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import Event from '../models/Event.js';
 import Business from '../models/Business.js';
 import Listing from '../models/Listing.js';
+import Message from '../models/Message.js';
 
 export const getAdminOverview = async (req: AuthRequest, res: Response) => {
   try {
@@ -403,5 +404,135 @@ export const getAdminUsers = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Admin users error:', error);
     res.status(500).json({ error: 'Failed to load community members' });
+  }
+};
+
+/**
+ * Send admin message to user
+ * POST /api/v1/admin/messages
+ */
+export const sendAdminMessage = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).userId;
+
+    // Verify user is admin
+    const admin = await User.findById(adminId);
+    if (!admin || !admin.isAdmin) {
+      res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      return;
+    }
+
+    const { recipientId, content } = req.body;
+
+    if (!recipientId || !content) {
+      res.status(400).json({ error: 'Recipient ID and message content are required' });
+      return;
+    }
+
+    // Get recipient
+    const recipient = await User.findById(recipientId);
+    if (!recipient) {
+      res.status(404).json({ error: 'Recipient not found' });
+      return;
+    }
+
+    // Create admin message
+    const message = await Message.create({
+      senderId: adminId,
+      senderName: 'Admin Team', // Always show as "Admin Team"
+      recipientId,
+      recipientName: recipient.username,
+      content: content.trim(),
+      isRead: false,
+      isAdminMessage: true,
+    });
+
+    res.status(201).json({
+      message: 'Admin message sent successfully',
+      data: message,
+    });
+  } catch (error: any) {
+    console.error('Send admin message error:', error);
+    res.status(500).json({ error: 'Failed to send admin message' });
+  }
+};
+
+/**
+ * Get admin messages (for admin panel view)
+ * GET /api/v1/admin/messages
+ */
+export const getAdminMessages = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).userId;
+
+    // Verify user is admin
+    const admin = await User.findById(adminId);
+    if (!admin || !admin.isAdmin) {
+      res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      return;
+    }
+
+    // Get all admin messages
+    const messages = await Message.find({ isAdminMessage: true })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
+    res.status(200).json({
+      data: messages,
+    });
+  } catch (error: any) {
+    console.error('Get admin messages error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin messages' });
+  }
+};
+
+/**
+ * Broadcast message to all users
+ * POST /api/v1/admin/messages/broadcast
+ */
+export const broadcastAdminMessage = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).userId;
+
+    // Verify user is admin
+    const admin = await User.findById(adminId);
+    if (!admin || !admin.isAdmin) {
+      res.status(403).json({ error: 'Unauthorized: Admin access required' });
+      return;
+    }
+
+    const { content } = req.body;
+
+    if (!content) {
+      res.status(400).json({ error: 'Message content is required' });
+      return;
+    }
+
+    // Get all non-admin users
+    const users = await User.find({ isAdmin: false }).select('_id username');
+
+    // Create admin message for each user
+    const messages = await Promise.all(
+      users.map((user) =>
+        Message.create({
+          senderId: adminId,
+          senderName: 'Admin Team',
+          recipientId: user._id,
+          recipientName: user.username,
+          content: content.trim(),
+          isRead: false,
+          isAdminMessage: true,
+        })
+      )
+    );
+
+    res.status(201).json({
+      message: `Admin message broadcasted to ${messages.length} users`,
+      count: messages.length,
+    });
+  } catch (error: any) {
+    console.error('Broadcast admin message error:', error);
+    res.status(500).json({ error: 'Failed to broadcast admin message' });
   }
 };

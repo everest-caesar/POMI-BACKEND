@@ -9,6 +9,9 @@ import {
   updateEventStatus,
   updateListingStatus,
   getAdminUsers,
+  sendAdminMessage,
+  getAdminMessages,
+  broadcastAdminMessage,
 } from '../controllers/admin.controller.js';
 
 const router = Router();
@@ -23,5 +26,10 @@ router.patch('/businesses/:id/status', updateBusinessStatus);
 router.get('/marketplace', getAdminListings);
 router.patch('/marketplace/:id/status', updateListingStatus);
 router.get('/users', getAdminUsers);
+
+// Admin messaging routes
+router.post('/messages', sendAdminMessage);
+router.get('/messages', getAdminMessages);
+router.post('/messages/broadcast', broadcastAdminMessage);
 
 export default router;

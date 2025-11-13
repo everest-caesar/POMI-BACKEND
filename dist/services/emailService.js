@@ -1,7 +1,13 @@
-import axios from 'axios';
+import sgMail from '@sendgrid/mail';
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'marakihay@gmail.com';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'marakihay@gmail.com';
+if (SENDGRID_API_KEY) {
+    sgMail.setApiKey(SENDGRID_API_KEY);
+}
+else {
+    console.warn('⚠️  SENDGRID_API_KEY not configured. Emails will not be sent.');
+}
 /**
  * Send email using SendGrid API
  */
@@ -11,38 +17,21 @@ const sendEmail = async (options) => {
         return false;
     }
     try {
-        const response = await axios.post('https://api.sendgrid.com/v3/mail/send', {
-            personalizations: [
-                {
-                    to: [
-                        {
-                            email: options.to,
-                        },
-                    ],
-                    subject: options.subject,
-                },
-            ],
+        await sgMail.send({
+            to: options.to,
             from: {
                 email: options.from || FROM_EMAIL,
                 name: 'Pomi Community',
             },
-            content: [
-                {
-                    type: 'text/html',
-                    value: options.html,
-                },
-            ],
-        }, {
-            headers: {
-                Authorization: `Bearer ${SENDGRID_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
+            subject: options.subject,
+            html: options.html,
         });
         console.log(`✅ Email sent to ${options.to}`);
         return true;
     }
     catch (error) {
-        console.error('❌ Failed to send email:', error.response?.data || error.message);
+        const sendGridErrors = error?.response?.body || error?.response?.data;
+        console.error('❌ Failed to send email:', sendGridErrors || error.message || error);
         return false;
     }
 };
@@ -60,24 +49,37 @@ const sendWelcomeEmail = async (email, username) => {
         <div style="padding: 20px; background: #f9fafb; border-radius: 8px;">
           <p>Selam ${username},</p>
 
-          <p>We're thrilled to have you join the Pomi community! You're now part of a vibrant network of Habesha-owned businesses, cultural events, and community connections in Ottawa.</p>
+          <p>Welcome to the digital home for the Ethiopian & Eritrean community in Ottawa. Pomi was built so that our culture, creators, entrepreneurs, and newcomers all have a trusted space to connect.</p>
 
-          <h3 style="color: #ef4444;">What you can do now:</h3>
-          <ul>
-            <li><strong>Browse Events</strong> - Discover upcoming cultural celebrations and community gatherings</li>
-            <li><strong>Explore Marketplace</strong> - Buy and sell items within our trusted community</li>
-            <li><strong>Visit Business Directory</strong> - Support Habesha-owned local businesses</li>
-            <li><strong>Join Forums</strong> - Connect with community members and share knowledge</li>
-          </ul>
+          <div style="margin: 24px 0; padding: 15px 18px; background: white; border-radius: 10px; border-left: 4px solid #ef4444;">
+            <h3 style="margin-top: 0; color: #ef4444;">Here’s what you can do right away:</h3>
+            <ul style="padding-left: 18px; margin: 12px 0;">
+              <li><strong>RSVP & Host Events:</strong> Highlight cultural holidays, networking nights, or faith gatherings on the Events board.</li>
+              <li><strong>Marketplace & Listings:</strong> Buy, sell, or swap essentials with verified neighbours—housing, services, textbooks, and more.</li>
+              <li><strong>Business Directory:</strong> Showcase Habesha-owned businesses so the community can find and support you.</li>
+              <li><strong>Direct Messaging:</strong> Chat safely with sellers, buyers, mentors, and admins right inside Pomi.</li>
+              <li><strong>Forums & Knowledge Threads:</strong> Share recommendations, ask questions, and keep our collective wisdom searchable.</li>
+            </ul>
+          </div>
 
-          <p style="margin-top: 30px;">
+          <div style="margin: 24px 0; padding: 15px 18px; background: #fff7ed; border-radius: 10px; border-left: 4px solid #f97316;">
+            <h3 style="margin-top: 0; color: #f97316;">Your first week on Pomi</h3>
+            <ol style="padding-left: 18px; margin: 12px 0;">
+              <li>Complete your profile so neighbours recognize you.</li>
+              <li>Save an event or follow a business that inspires you.</li>
+              <li>Introduce yourself in the forums or message the admin team if you need help.</li>
+            </ol>
+            <p style="margin: 0; font-size: 13px; color: #7c2d12;">Every interaction helps us keep the community safe, welcoming, and accountable.</p>
+          </div>
+
+          <p style="margin: 28px 0;">
             <a href="https://pomi-community.netlify.app" style="display: inline-block; background: #ef4444; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-              Explore Pomi
+              Explore the Pomi Hub
             </a>
           </p>
 
-          <p style="margin-top: 30px; font-size: 14px; color: #666;">
-            If you have any questions, feel free to reach out. The admin team is here to support your journey in the community.
+          <p style="margin: 0; font-size: 14px; color: #666;">
+            Need anything? Reply to this email or message the admin team directly inside the app—we’re here to cheer you on.
           </p>
         </div>
 

@@ -1,5 +1,11 @@
+import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
+const isValidObjectId = (value) => {
+    if (!value)
+        return false;
+    return mongoose.Types.ObjectId.isValid(value);
+};
 /**
  * Send a message
  * POST /api/v1/messages
@@ -14,6 +20,14 @@ export const sendMessage = async (req, res) => {
         }
         if (!recipientId || !content) {
             res.status(400).json({ error: 'Recipient ID and message content are required' });
+            return;
+        }
+        if (!isValidObjectId(recipientId)) {
+            res.status(400).json({ error: 'Invalid recipient ID' });
+            return;
+        }
+        if (listingId && !isValidObjectId(listingId)) {
+            res.status(400).json({ error: 'Invalid listing ID' });
             return;
         }
         if (content.trim().length === 0) {
@@ -71,7 +85,11 @@ export const getConversation = async (req, res) => {
             res.status(401).json({ error: 'Unauthorized' });
             return;
         }
-        const limitNum = Math.min(parseInt(limit) || 50, 100);
+        if (!isValidObjectId(recipientId)) {
+            res.status(400).json({ error: 'Invalid recipient ID' });
+            return;
+        }
+        const limitNum = Math.min(parseInt(limit, 10) || 50, 100);
         const skipNum = parseInt(skip) || 0;
         // Get messages between these two users
         const messages = await Message.find({
@@ -124,13 +142,80 @@ export const getConversations = async (req, res) => {
             res.status(401).json({ error: 'Unauthorized' });
             return;
         }
-        // Get all unique users this person has messaged
-        const conversations = await Message.aggregate([
+        if (!isValidObjectId(userId)) {
+            res.status(400).json({ error: 'Invalid user ID' });
+            return;
+        }
+        const userObjectId = new mongoose.Types.ObjectId(userId);
+        const mapConversation = (conv, includeListing = false) => ({
+            userId: typeof conv._id === 'object' && conv._id?.toString
+                ? conv._id.toString()
+                : conv._id,
+            userName: conv.otherUserName,
+            lastMessage: conv.lastMessage,
+            lastMessageTime: conv.lastMessageTime,
+            unreadCount: conv.unreadCount ?? 0,
+            hasListing: includeListing ? Boolean(conv.hasListing) : false,
+            lastListingId: includeListing && conv.lastListingId && conv.lastListingId.toString
+                ? conv.lastListingId.toString()
+                : null,
+        });
+        const primaryPipeline = ([
+            {
+                $match: {
+                    $or: [{ senderId: userObjectId }, { recipientId: userObjectId }],
+                },
+            },
+            { $sort: { createdAt: -1 } },
+            {
+                $group: {
+                    _id: {
+                        $cond: [
+                            { $eq: ['$senderId', userObjectId] },
+                            '$recipientId',
+                            '$senderId',
+                        ],
+                    },
+                    otherUserName: {
+                        $cond: [
+                            { $eq: ['$senderId', userObjectId] },
+                            '$recipientName',
+                            '$senderName',
+                        ],
+                    },
+                    lastMessage: { $first: '$content' },
+                    lastMessageTime: { $first: '$createdAt' },
+                    lastListingId: { $first: '$listingId' },
+                    hasListing: {
+                        $max: {
+                            $cond: [{ $ifNull: ['$listingId', false] }, 1, 0],
+                        },
+                    },
+                    unreadCount: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $eq: ['$recipientId', userObjectId] },
+                                        { $eq: ['$isRead', false] },
+                                    ],
+                                },
+                                1,
+                                0,
+                            ],
+                        },
+                    },
+                },
+            },
+            { $sort: { lastMessageTime: -1 } },
+        ]);
+        const fallbackPipeline = ([
             {
                 $match: {
                     $or: [{ senderId: userId }, { recipientId: userId }],
                 },
             },
+            { $sort: { createdAt: -1 } },
             {
                 $group: {
                     _id: {
@@ -147,8 +232,8 @@ export const getConversations = async (req, res) => {
                             '$senderName',
                         ],
                     },
-                    lastMessage: { $last: '$content' },
-                    lastMessageTime: { $last: '$createdAt' },
+                    lastMessage: { $first: '$content' },
+                    lastMessageTime: { $first: '$createdAt' },
                     unreadCount: {
                         $sum: {
                             $cond: [
@@ -165,19 +250,28 @@ export const getConversations = async (req, res) => {
                     },
                 },
             },
-            {
-                $sort: { lastMessageTime: -1 },
-            },
+            { $sort: { lastMessageTime: -1 } },
         ]);
-        res.status(200).json({
-            data: conversations.map((conv) => ({
-                userId: conv._id,
-                userName: conv.otherUserName,
-                lastMessage: conv.lastMessage,
-                lastMessageTime: conv.lastMessageTime,
-                unreadCount: conv.unreadCount,
-            })),
-        });
+        try {
+            const conversations = (await Message.aggregate(primaryPipeline));
+            res.status(200).json({
+                data: conversations.map((conv) => mapConversation(conv, true)),
+            });
+            return;
+        }
+        catch (primaryError) {
+            console.error('Get conversations pipeline error:', primaryError);
+        }
+        try {
+            const fallbackConversations = (await Message.aggregate(fallbackPipeline));
+            res.status(200).json({
+                data: fallbackConversations.map((conv) => mapConversation(conv, false)),
+            });
+        }
+        catch (fallbackError) {
+            console.error('Get conversations fallback error:', fallbackError);
+            res.status(500).json({ error: 'Failed to fetch conversations' });
+        }
     }
     catch (error) {
         console.error('Get conversations error:', error);
@@ -193,6 +287,10 @@ export const getUnreadCount = async (req, res) => {
         const userId = req.userId;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        if (!isValidObjectId(userId)) {
+            res.status(400).json({ error: 'Invalid user ID' });
             return;
         }
         const count = await Message.countDocuments({
@@ -216,6 +314,10 @@ export const markAsRead = async (req, res) => {
         const userId = req.userId;
         if (!userId) {
             res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        if (!isValidObjectId(messageId)) {
+            res.status(400).json({ error: 'Invalid message ID' });
             return;
         }
         const message = await Message.findById(messageId);

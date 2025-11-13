@@ -3,6 +3,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import app from './app.js';
 import { initializeBucket, initializeBusinessBucket } from './services/storageService.js';
+import Message from './models/Message.js';
+import User from './models/User.js';
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -67,7 +69,7 @@ io.on('connection', (socket) => {
   });
 
   // Handle incoming messages
-  socket.on('message:send', (data: { recipientId: string; content: string; listingId?: string }) => {
+  socket.on('message:send', async (data: { recipientId: string; content: string; listingId?: string }) => {
     const senderId = socketUserMap.get(socket.id);
 
     if (!senderId) {
@@ -80,18 +82,58 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Emit to recipient(s) if they're connected
-    const recipientSockets = activeUsers.get(data.recipientId);
-    if (recipientSockets) {
-      recipientSockets.forEach((socketId) => {
-        io.to(socketId).emit('message:receive', {
-          senderId,
-          content: data.content,
-          listingId: data.listingId,
-          timestamp: new Date(),
-        });
-        io.to(socketId).emit('typing:stop', { userId: senderId });
+    try {
+      // FIX: Fetch sender and recipient details from database
+      const [sender, recipient] = await Promise.all([
+        User.findById(senderId),
+        User.findById(data.recipientId),
+      ]);
+
+      if (!sender || !recipient) {
+        socket.emit('message:error', { message: 'User not found' });
+        return;
+      }
+
+      // FIX: Save message to MongoDB
+      const message = await Message.create({
+        senderId,
+        senderName: sender.username,
+        recipientId: data.recipientId,
+        recipientName: recipient.username,
+        content: data.content.trim(),
+        listingId: data.listingId || undefined,
+        isRead: false,
       });
+
+      console.log(`💬 Message saved to DB: ${message._id} from ${sender.username} to ${recipient.username}`);
+
+      // Emit to recipient(s) if they're connected
+      const recipientSockets = activeUsers.get(data.recipientId);
+      if (recipientSockets) {
+        recipientSockets.forEach((socketId) => {
+          io.to(socketId).emit('message:receive', {
+            _id: message._id.toString(),
+            senderId,
+            senderName: sender.username,
+            content: data.content,
+            listingId: data.listingId,
+            timestamp: message.createdAt,
+            isRead: false,
+          });
+          io.to(socketId).emit('typing:stop', { userId: senderId });
+        });
+      }
+
+      // Emit success confirmation to sender
+      socket.emit('message:sent', {
+        _id: message._id.toString(),
+        recipientId: data.recipientId,
+        content: data.content,
+        timestamp: message.createdAt,
+      });
+    } catch (error) {
+      console.error('❌ Error saving message:', error);
+      socket.emit('message:error', { message: 'Failed to save message' });
     }
   });
 
