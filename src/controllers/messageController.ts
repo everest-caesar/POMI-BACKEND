@@ -194,7 +194,7 @@ export const getConversations = async (
       lastMessage: conv.lastMessage,
       lastMessageTime: conv.lastMessageTime,
       unreadCount: conv.unreadCount ?? 0,
-      hasListing: includeListing ? Boolean(conv.hasListing) : false,
+      hasListing: includeListing ? (conv.hasListing > 0) : false,
       lastListingId:
         includeListing && conv.lastListingId && conv.lastListingId.toString
           ? conv.lastListingId.toString()
@@ -218,19 +218,19 @@ export const getConversations = async (
             ],
           },
           otherUserName: {
-            $cond: [
-              { $eq: ['$senderId', userObjectId] },
-              '$recipientName',
-              '$senderName',
-            ],
+            $first: {
+              $cond: {
+                if: { $eq: ['$senderId', userObjectId] },
+                then: '$recipientName',
+                else: '$senderName',
+              },
+            },
           },
           lastMessage: { $first: '$content' },
           lastMessageTime: { $first: '$createdAt' },
           lastListingId: { $first: '$listingId' },
           hasListing: {
-            $max: {
-              $cond: [{ $ifNull: ['$listingId', false] }, 1, 0],
-            },
+            $sum: { $cond: [{ $ne: ['$listingId', null] }, 1, 0] },
           },
           unreadCount: {
             $sum: {
@@ -268,11 +268,13 @@ export const getConversations = async (
             ],
           },
           otherUserName: {
-            $cond: [
-              { $eq: ['$senderId', userId] },
-              '$recipientName',
-              '$senderName',
-            ],
+            $first: {
+              $cond: {
+                if: { $eq: ['$senderId', userId] },
+                then: '$recipientName',
+                else: '$senderName',
+              },
+            },
           },
           lastMessage: { $first: '$content' },
           lastMessageTime: { $first: '$createdAt' },
