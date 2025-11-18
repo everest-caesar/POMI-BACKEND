@@ -159,11 +159,12 @@ export const login = async (req: Request, res: Response) => {
     }
 
     const normalizedEmail = email.toLowerCase();
-    if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL) {
-      return res.status(403).json({
-        error: 'Please use the secure admin console to sign in with this credential.',
-      });
-    }
+    // TEMPORARILY DISABLED FOR DEVELOPMENT: Admin can login via regular endpoint
+    // if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL) {
+    //   return res.status(403).json({
+    //     error: 'Please use the secure admin console to sign in with this credential.',
+    //   });
+    // }
 
     // Find user (need to include password field for comparison)
     const user = await User.findOne({ email: normalizedEmail }).select('+password');
