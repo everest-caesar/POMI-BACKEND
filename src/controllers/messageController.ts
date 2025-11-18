@@ -254,7 +254,12 @@ export const getConversations = async (
     const fallbackPipeline = ([
       {
         $match: {
-          $or: [{ senderId: userId }, { recipientId: userId }],
+          $expr: {
+            $or: [
+              { $eq: [{ $toString: '$senderId' }, userId] },
+              { $eq: [{ $toString: '$recipientId' }, userId] },
+            ],
+          },
         },
       },
       { $sort: { createdAt: -1 as 1 | -1 } },
@@ -262,7 +267,7 @@ export const getConversations = async (
         $group: {
           _id: {
             $cond: [
-              { $eq: ['$senderId', userId] },
+              { $eq: [{ $toString: '$senderId' }, userId] },
               '$recipientId',
               '$senderId',
             ],
@@ -270,7 +275,7 @@ export const getConversations = async (
           otherUserName: {
             $first: {
               $cond: {
-                if: { $eq: ['$senderId', userId] },
+                if: { $eq: [{ $toString: '$senderId' }, userId] },
                 then: '$recipientName',
                 else: '$senderName',
               },
@@ -283,7 +288,7 @@ export const getConversations = async (
               $cond: [
                 {
                   $and: [
-                    { $eq: ['$recipientId', userId] },
+                    { $eq: [{ $toString: '$recipientId' }, userId] },
                     { $eq: ['$isRead', false] },
                   ],
                 },
