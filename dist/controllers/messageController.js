@@ -212,7 +212,12 @@ export const getConversations = async (req, res) => {
         const fallbackPipeline = ([
             {
                 $match: {
-                    $or: [{ senderId: userId }, { recipientId: userId }],
+                    $expr: {
+                        $or: [
+                            { $eq: [{ $toString: '$senderId' }, userId] },
+                            { $eq: [{ $toString: '$recipientId' }, userId] },
+                        ],
+                    },
                 },
             },
             { $sort: { createdAt: -1 } },
@@ -220,7 +225,7 @@ export const getConversations = async (req, res) => {
                 $group: {
                     _id: {
                         $cond: [
-                            { $eq: ['$senderId', userId] },
+                            { $eq: [{ $toString: '$senderId' }, userId] },
                             '$recipientId',
                             '$senderId',
                         ],
@@ -228,7 +233,7 @@ export const getConversations = async (req, res) => {
                     otherUserName: {
                         $first: {
                             $cond: {
-                                if: { $eq: ['$senderId', userId] },
+                                if: { $eq: [{ $toString: '$senderId' }, userId] },
                                 then: '$recipientName',
                                 else: '$senderName',
                             },
@@ -236,12 +241,18 @@ export const getConversations = async (req, res) => {
                     },
                     lastMessage: { $first: '$content' },
                     lastMessageTime: { $first: '$createdAt' },
+                    lastListingId: { $first: '$listingId' },
+                    hasListing: {
+                        $sum: {
+                            $cond: [{ $ifNull: ['$listingId', false] }, 1, 0],
+                        },
+                    },
                     unreadCount: {
                         $sum: {
                             $cond: [
                                 {
                                     $and: [
-                                        { $eq: ['$recipientId', userId] },
+                                        { $eq: [{ $toString: '$recipientId' }, userId] },
                                         { $eq: ['$isRead', false] },
                                     ],
                                 },
@@ -254,26 +265,26 @@ export const getConversations = async (req, res) => {
             },
             { $sort: { lastMessageTime: -1 } },
         ]);
+        let conversations = [];
         try {
-            const conversations = (await Message.aggregate(primaryPipeline));
-            res.status(200).json({
-                data: conversations.map((conv) => mapConversation(conv, true)),
-            });
-            return;
+            conversations = (await Message.aggregate(primaryPipeline));
         }
         catch (primaryError) {
             console.error('Get conversations pipeline error:', primaryError);
         }
-        try {
-            const fallbackConversations = (await Message.aggregate(fallbackPipeline));
-            res.status(200).json({
-                data: fallbackConversations.map((conv) => mapConversation(conv, false)),
-            });
+        if (!conversations.length) {
+            try {
+                conversations = (await Message.aggregate(fallbackPipeline));
+            }
+            catch (fallbackError) {
+                console.error('Get conversations fallback error:', fallbackError);
+                res.status(500).json({ error: 'Failed to fetch conversations' });
+                return;
+            }
         }
-        catch (fallbackError) {
-            console.error('Get conversations fallback error:', fallbackError);
-            res.status(500).json({ error: 'Failed to fetch conversations' });
-        }
+        res.status(200).json({
+            data: conversations.map((conv) => mapConversation(conv, true)),
+        });
     }
     catch (error) {
         console.error('Get conversations error:', error);

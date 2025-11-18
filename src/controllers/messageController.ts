@@ -283,6 +283,12 @@ export const getConversations = async (
           },
           lastMessage: { $first: '$content' },
           lastMessageTime: { $first: '$createdAt' },
+          lastListingId: { $first: '$listingId' },
+          hasListing: {
+            $sum: {
+              $cond: [{ $ifNull: ['$listingId', false] }, 1, 0],
+            },
+          },
           unreadCount: {
             $sum: {
               $cond: [
@@ -302,28 +308,27 @@ export const getConversations = async (
       { $sort: { lastMessageTime: -1 as 1 | -1 } },
     ]) as PipelineStage[];
 
+    let conversations: any[] = [];
+
     try {
-      const conversations = (await Message.aggregate(primaryPipeline)) as any[];
-      res.status(200).json({
-        data: conversations.map((conv) => mapConversation(conv, true)),
-      });
-      return;
+      conversations = (await Message.aggregate(primaryPipeline)) as any[];
     } catch (primaryError) {
       console.error('Get conversations pipeline error:', primaryError);
     }
 
-    try {
-      const fallbackConversations = (await Message.aggregate(
-        fallbackPipeline
-      )) as any[];
-
-      res.status(200).json({
-        data: fallbackConversations.map((conv) => mapConversation(conv, false)),
-      });
-    } catch (fallbackError) {
-      console.error('Get conversations fallback error:', fallbackError);
-      res.status(500).json({ error: 'Failed to fetch conversations' });
+    if (!conversations.length) {
+      try {
+        conversations = (await Message.aggregate(fallbackPipeline)) as any[];
+      } catch (fallbackError) {
+        console.error('Get conversations fallback error:', fallbackError);
+        res.status(500).json({ error: 'Failed to fetch conversations' });
+        return;
+      }
     }
+
+    res.status(200).json({
+      data: conversations.map((conv) => mapConversation(conv, true)),
+    });
   } catch (error: any) {
     console.error('Get conversations error:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
