@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IListing extends Document {
-  _id: string;
+  _id: mongoose.Types.ObjectId;
   title: string;
   description: string;
   category: string;
