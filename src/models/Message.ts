@@ -7,6 +7,7 @@ export interface IMessage extends Document {
   recipientId: mongoose.Types.ObjectId;
   recipientName: string;
   listingId?: mongoose.Types.ObjectId; // Reference to marketplace listing if messaging about a listing
+  clientMessageId?: string | null;
   content: string;
   isRead: boolean;
   readAt?: Date | null;
@@ -40,6 +41,11 @@ const messageSchema = new Schema<IMessage>(
     listingId: {
       type: Schema.Types.ObjectId,
       ref: 'Listing',
+    },
+    clientMessageId: {
+      type: String,
+      index: true,
+      default: null,
     },
     content: {
       type: String,

@@ -54,8 +54,12 @@ io.on('connection', (socket) => {
       }
       activeUsers.get(userId)!.add(socket.id);
       socketUserMap.set(socket.id, userId);
+      socket.join(userId);
 
       socket.emit('auth:success');
+      socket.emit('user:presence', {
+        userIds: Array.from(activeUsers.keys()).filter((id) => id !== userId),
+      });
 
       // Notify others that this user is online
       socket.broadcast.emit('user:online', { userId });
@@ -69,7 +73,9 @@ io.on('connection', (socket) => {
   });
 
   // Handle incoming messages
-  socket.on('message:send', async (data: { recipientId: string; content: string; listingId?: string }) => {
+  socket.on(
+    'message:send',
+    async (data: { recipientId: string; content: string; listingId?: string; clientMessageId?: string }) => {
     const senderId = socketUserMap.get(socket.id);
 
     if (!senderId) {
@@ -102,6 +108,7 @@ io.on('connection', (socket) => {
         recipientName: recipient.username,
         content: data.content.trim(),
         listingId: data.listingId || undefined,
+        clientMessageId: data.clientMessageId || null,
         isRead: false,
       });
 
@@ -118,6 +125,7 @@ io.on('connection', (socket) => {
             content: data.content,
             listingId: data.listingId,
             timestamp: message.createdAt,
+            clientMessageId: data.clientMessageId || null,
             isRead: false,
           });
           io.to(socketId).emit('typing:stop', { userId: senderId });
@@ -130,6 +138,8 @@ io.on('connection', (socket) => {
         recipientId: data.recipientId,
         content: data.content,
         timestamp: message.createdAt,
+        listingId: data.listingId || null,
+        clientMessageId: data.clientMessageId || null,
       });
     } catch (error) {
       console.error('❌ Error saving message:', error);

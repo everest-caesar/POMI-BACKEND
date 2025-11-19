@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import mongoose, { PipelineStage } from 'mongoose';
+import type { Server as SocketIOServer } from 'socket.io';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
@@ -18,7 +19,7 @@ export const sendMessage = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { recipientId, content, listingId } = req.body;
+    const { recipientId, content, listingId, clientMessageId } = req.body;
     const senderId = (req as any).userId;
 
     if (!senderId) {
@@ -74,11 +75,36 @@ export const sendMessage = async (
       recipientId,
       recipientName: recipient.username,
       listingId: listingId || undefined,
+      clientMessageId: clientMessageId || null,
       content: content.trim(),
       isRead: false,
     });
 
     await message.save();
+
+    const io = req.app.get('io') as SocketIOServer | undefined;
+    if (io) {
+      const payload = {
+        _id: message._id.toString(),
+        senderId: senderId.toString(),
+        senderName: sender.username,
+        content: message.content,
+        listingId: message.listingId ? message.listingId.toString() : undefined,
+        timestamp: message.createdAt,
+        clientMessageId: message.clientMessageId || null,
+        isRead: false,
+      };
+
+      io.to(recipientId.toString()).emit('message:receive', payload);
+      io.to(senderId.toString()).emit('message:sent', {
+        _id: message._id.toString(),
+        recipientId: recipientId.toString(),
+        content: message.content,
+        timestamp: message.createdAt,
+        listingId: message.listingId ? message.listingId.toString() : null,
+        clientMessageId: message.clientMessageId || null,
+      });
+    }
 
     res.status(201).json({
       message: 'Message sent successfully',
