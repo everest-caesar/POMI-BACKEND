@@ -13,6 +13,21 @@ export interface AuthRequest extends Request {
   };
 }
 
+const assignUserContext = (req: Request, decoded: any) => {
+  if (typeof decoded !== 'object' || decoded === null) {
+    return;
+  }
+
+  const inferredId = decoded.sub || decoded.userId || decoded.id;
+  (req as any).userId = inferredId;
+  (req as AuthRequest).user = {
+    id: inferredId,
+    email: decoded.email,
+    username: decoded.username,
+    isAdmin: decoded.isAdmin || false,
+  };
+};
+
 /**
  * JWT verification middleware
  * Extracts and validates JWT token from Authorization header
@@ -38,15 +53,7 @@ export const authenticateToken = (
       return;
     }
 
-    if (typeof decoded === 'object' && decoded !== null) {
-      req.user = {
-        id: decoded.sub || decoded.userId || decoded.id,
-        email: decoded.email,
-        username: decoded.username,
-        isAdmin: decoded.isAdmin || false,
-      };
-    }
-
+    assignUserContext(req, decoded);
     next();
   });
 };
@@ -84,13 +91,8 @@ export const optionalAuth = (
     const secret = process.env.JWT_SECRET || 'fallback-secret';
 
     jwt.verify(token, secret, (err, decoded) => {
-      if (!err && typeof decoded === 'object' && decoded !== null) {
-        req.user = {
-          id: decoded.sub || decoded.userId || decoded.id,
-          email: decoded.email,
-          username: decoded.username,
-          isAdmin: decoded.isAdmin || false,
-        };
+      if (!err) {
+        assignUserContext(req, decoded);
       }
     });
   }
