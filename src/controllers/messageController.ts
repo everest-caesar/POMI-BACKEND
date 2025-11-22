@@ -4,6 +4,8 @@ import type { Server as SocketIOServer } from 'socket.io';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
+import Listing from '../models/Listing.js';
+import emailService from '../services/emailService.js';
 
 const isValidObjectId = (value?: string): boolean => {
   if (!value) return false;
@@ -82,6 +84,47 @@ export const sendMessage = async (
 
     await message.save();
 
+    const queueNotificationEmail = () => {
+      if (!recipient.email) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          let listingSummary:
+            | { title: string | null; price: number | null; location: string | null }
+            | null = null;
+
+          if (message.listingId) {
+            const listingDoc = await Listing.findById(message.listingId).select(
+              'title price location'
+            );
+            if (listingDoc) {
+              listingSummary = {
+                title: typeof listingDoc.title === 'string' ? listingDoc.title : null,
+                price:
+                  typeof listingDoc.price === 'number' ? Number(listingDoc.price) : null,
+                location:
+                  typeof listingDoc.location === 'string' ? listingDoc.location : null,
+              };
+            }
+          }
+
+          await emailService.sendMessageNotification({
+            recipientEmail: recipient.email,
+            recipientName: recipient.username,
+            senderName: sender.username,
+            messageSnippet: message.content,
+            listingTitle: listingSummary?.title ?? null,
+            listingPrice: listingSummary?.price ?? null,
+            listingLocation: listingSummary?.location ?? null,
+          });
+        } catch (notifyError) {
+          console.error('Message notification email failed:', notifyError);
+        }
+      })();
+    };
+
     const io = req.app.get('io') as SocketIOServer | undefined;
     if (io) {
       const payload = {
@@ -105,6 +148,8 @@ export const sendMessage = async (
         clientMessageId: message.clientMessageId || null,
       });
     }
+
+    queueNotificationEmail();
 
     res.status(201).json({
       message: 'Message sent successfully',
