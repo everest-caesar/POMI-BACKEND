@@ -12,6 +12,7 @@ import {
   sendAdminMessage,
   getAdminMessages,
   broadcastAdminMessage,
+  getAdminInbox,
 } from '../controllers/admin.controller.js';
 
 const router = Router();
@@ -31,5 +32,6 @@ router.get('/users', getAdminUsers);
 router.post('/messages', sendAdminMessage);
 router.get('/messages', getAdminMessages);
 router.post('/messages/broadcast', broadcastAdminMessage);
+router.get('/messages/inbox', getAdminInbox);
 
 export default router;

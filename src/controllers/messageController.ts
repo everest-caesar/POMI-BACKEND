@@ -483,3 +483,100 @@ export const markAsRead = async (
     res.status(500).json({ error: 'Failed to mark message as read' });
   }
 };
+
+/**
+ * Get admin messages for current user
+ * GET /api/v1/messages/admin/inbox
+ */
+export const getAdminInbox = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!isValidObjectId(userId)) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    // Get all admin messages sent to this user
+    const messages = await Message.find({
+      recipientId: userId,
+      isAdminMessage: true,
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.status(200).json({
+      data: messages,
+      count: messages.length,
+    });
+  } catch (error: any) {
+    console.error('Get admin inbox error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin messages' });
+  }
+};
+
+/**
+ * Send message to admin (user reply to admin team)
+ * POST /api/v1/messages/admin/reply
+ */
+export const sendAdminReply = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    const { content } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!content || !content.trim()) {
+      res.status(400).json({ error: 'Message content is required' });
+      return;
+    }
+
+    // Get sender info
+    const sender = await User.findById(userId);
+    if (!sender) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Find an admin user to send the message to
+    const admin = await User.findOne({ isAdmin: true });
+    if (!admin) {
+      res.status(404).json({ error: 'Admin not found' });
+      return;
+    }
+
+    // Create message to admin
+    const message = await Message.create({
+      senderId: userId,
+      senderName: sender.username,
+      recipientId: admin._id,
+      recipientName: 'Admin Team',
+      content: content.trim(),
+      isRead: false,
+      isAdminMessage: false, // Regular message from user to admin
+    });
+
+    res.status(201).json({
+      message: 'Message sent to admin team',
+      data: message,
+    });
+  } catch (error: any) {
+    console.error('Send admin reply error:', error);
+    res.status(500).json({ error: 'Failed to send message to admin' });
+  }
+};

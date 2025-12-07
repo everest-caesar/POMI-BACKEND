@@ -84,18 +84,20 @@ export const register = async (req: Request, res: Response) => {
     }
     parsedAge = numericAge;
 
-    if (typeof rawArea !== 'string' || rawArea.trim() === '') {
-      return res.status(400).json({ error: 'Area is required' });
-    }
-    const trimmedArea = rawArea.trim();
-    if (!OTTAWA_AREAS.includes(trimmedArea)) {
-      return res.status(400).json({ error: 'Please select a valid area' });
+    // Optional: area and workOrSchool fields
+    let trimmedArea: string | undefined;
+    let parsedWorkOrSchool: string | undefined;
+
+    if (rawArea && typeof rawArea === 'string' && rawArea.trim() !== '') {
+      trimmedArea = rawArea.trim();
+      if (!OTTAWA_AREAS.includes(trimmedArea)) {
+        return res.status(400).json({ error: 'Please select a valid area' });
+      }
     }
 
-    if (typeof rawWorkOrSchool !== 'string' || rawWorkOrSchool.trim() === '') {
-      return res.status(400).json({ error: 'School or workplace is required' });
+    if (rawWorkOrSchool && typeof rawWorkOrSchool === 'string' && rawWorkOrSchool.trim() !== '') {
+      parsedWorkOrSchool = rawWorkOrSchool.trim();
     }
-    const parsedWorkOrSchool = rawWorkOrSchool.trim();
 
     // Create new user
     const newUser = new User({
@@ -103,8 +105,8 @@ export const register = async (req: Request, res: Response) => {
       password,
       username,
       age: parsedAge,
-      area: trimmedArea,
-      workOrSchool: parsedWorkOrSchool,
+      ...(trimmedArea && { area: trimmedArea }),
+      ...(parsedWorkOrSchool && { workOrSchool: parsedWorkOrSchool }),
       isAdmin: false,
     });
 
