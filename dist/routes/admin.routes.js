@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, requireAdmin } from '../middleware/authMiddleware.js';
-import { getAdminOverview, getAdminEvents, getAdminBusinesses, updateBusinessStatus, getAdminListings, updateEventStatus, updateListingStatus, getAdminUsers, sendAdminMessage, getAdminMessages, broadcastAdminMessage, getAdminInbox, } from '../controllers/admin.controller.js';
+import { getAdminOverview, getAdminEvents, getAdminBusinesses, updateBusinessStatus, getAdminListings, updateEventStatus, updateListingStatus, getAdminUsers, sendAdminMessage, getAdminMessages, broadcastAdminMessage, getAdminInbox, getAdminConversation, } from '../controllers/admin.controller.js';
 const router = Router();
 router.use(authenticate, requireAdmin);
 router.get('/overview', getAdminOverview);
@@ -16,5 +16,6 @@ router.post('/messages', sendAdminMessage);
 router.get('/messages', getAdminMessages);
 router.post('/messages/broadcast', broadcastAdminMessage);
 router.get('/messages/inbox', getAdminInbox);
+router.get('/messages/conversation/:userId', getAdminConversation);
 export default router;
 //# sourceMappingURL=admin.routes.js.map

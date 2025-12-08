@@ -499,4 +499,51 @@ export const getAdminInbox = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch admin inbox' });
     }
 };
+/**
+ * Get conversation between admin and a specific user
+ * GET /api/v1/admin/messages/conversation/:userId
+ */
+export const getAdminConversation = async (req, res) => {
+    try {
+        const adminId = req.userId;
+        const { userId } = req.params;
+        // Verify user is admin
+        const admin = await User.findById(adminId);
+        if (!admin || !admin.isAdmin) {
+            res.status(403).json({ error: 'Unauthorized: Admin access required' });
+            return;
+        }
+        // Verify the other user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        // Get all messages between admin and this user (bidirectional)
+        const messages = await Message.find({
+            $or: [
+                { senderId: adminId, recipientId: userId },
+                { senderId: userId, recipientId: adminId },
+            ],
+        })
+            .sort({ createdAt: 1 }) // Chronological order
+            .lean();
+        // Mark messages from user as read
+        await Message.updateMany({
+            senderId: userId,
+            recipientId: adminId,
+            isRead: false,
+        }, {
+            $set: { isRead: true },
+        });
+        res.status(200).json({
+            data: messages,
+            count: messages.length,
+        });
+    }
+    catch (error) {
+        console.error('Get admin conversation error:', error);
+        res.status(500).json({ error: 'Failed to fetch conversation' });
+    }
+};
 //# sourceMappingURL=admin.controller.js.map

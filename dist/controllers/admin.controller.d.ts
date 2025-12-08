@@ -28,4 +28,9 @@ export declare const broadcastAdminMessage: (req: AuthRequest, res: Response) =>
  * GET /api/v1/admin/messages/inbox
  */
 export declare const getAdminInbox: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Get conversation between admin and a specific user
+ * GET /api/v1/admin/messages/conversation/:userId
+ */
+export declare const getAdminConversation: (req: AuthRequest, res: Response) => Promise<void>;
 //# sourceMappingURL=admin.controller.d.ts.map
