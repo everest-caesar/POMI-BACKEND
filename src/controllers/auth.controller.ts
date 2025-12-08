@@ -10,24 +10,6 @@ import {
 import User from '../models/User.js';
 import emailService from '../services/emailService.js';
 
-const OTTAWA_AREAS = [
-  'Downtown Ottawa',
-  'Barrhaven',
-  'Kanata',
-  'Nepean',
-  'Gloucester',
-  'Orleans',
-  'Vanier',
-  'Westboro',
-  'Rockcliffe Park',
-  'Sandy Hill',
-  'The Glebe',
-  'Bytown',
-  'South Ottawa',
-  'North Ottawa',
-  'Outside Ottawa',
-];
-
 const ADMIN_INVITE_CODE = process.env.ADMIN_INVITE_CODE;
 
 /**
@@ -75,21 +57,12 @@ export const register = async (
       return;
     }
 
-    if (typeof rawArea !== 'string' || rawArea.trim() === '') {
-      res.status(400).json({ error: 'Area is required' });
-      return;
-    }
-    const trimmedArea = rawArea.trim();
-    if (!OTTAWA_AREAS.includes(trimmedArea)) {
-      res.status(400).json({ error: 'Please select a valid area' });
-      return;
-    }
-
-    if (typeof rawWorkOrSchool !== 'string' || rawWorkOrSchool.trim() === '') {
-      res.status(400).json({ error: 'School or workplace is required' });
-      return;
-    }
-    const trimmedWorkOrSchool = rawWorkOrSchool.trim();
+    const trimmedArea =
+      typeof rawArea === 'string' && rawArea.trim() !== '' ? rawArea.trim() : undefined;
+    const trimmedWorkOrSchool =
+      typeof rawWorkOrSchool === 'string' && rawWorkOrSchool.trim() !== ''
+        ? rawWorkOrSchool.trim()
+        : undefined;
 
     let isAdmin = false;
     if (adminInviteCode) {
@@ -117,8 +90,8 @@ export const register = async (
       username,
       password, // Password will be hashed by the model's pre-save hook
       age: parsedAge,
-      area: trimmedArea,
-      workOrSchool: trimmedWorkOrSchool,
+      ...(trimmedArea ? { area: trimmedArea } : {}),
+      ...(trimmedWorkOrSchool ? { workOrSchool: trimmedWorkOrSchool } : {}),
       isAdmin,
     });
 
@@ -224,6 +197,13 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       isAdminType: typeof user.isAdmin,
       toJSON: user.toJSON?.(),
     });
+
+    if (user.isAdmin) {
+      res.status(403).json({
+        error: 'Admin accounts can only use the secure console to sign in.',
+      });
+      return;
+    }
 
     // Generate tokens
     const { accessToken } = generateTokenPair(

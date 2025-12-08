@@ -1,6 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 export interface IListing extends Document {
-    _id: string;
+    _id: mongoose.Types.ObjectId;
     title: string;
     description: string;
     category: string;
@@ -21,7 +21,7 @@ export interface IListing extends Document {
     updatedAt: Date;
 }
 declare const Listing: mongoose.Model<IListing, {}, {}, {}, mongoose.Document<unknown, {}, IListing, {}, {}> & IListing & Required<{
-    _id: string;
+    _id: mongoose.Types.ObjectId;
 }> & {
     __v: number;
 }, any>;

@@ -1,4 +1,17 @@
 import jwt from 'jsonwebtoken';
+const assignUserContext = (req, decoded) => {
+    if (typeof decoded !== 'object' || decoded === null) {
+        return;
+    }
+    const inferredId = decoded.sub || decoded.userId || decoded.id;
+    req.userId = inferredId;
+    req.user = {
+        id: inferredId,
+        email: decoded.email,
+        username: decoded.username,
+        isAdmin: decoded.isAdmin || false,
+    };
+};
 /**
  * JWT verification middleware
  * Extracts and validates JWT token from Authorization header
@@ -16,14 +29,7 @@ export const authenticateToken = (req, res, next) => {
             res.status(403).json({ error: 'Invalid or expired token' });
             return;
         }
-        if (typeof decoded === 'object' && decoded !== null) {
-            req.user = {
-                id: decoded.sub || decoded.userId || decoded.id,
-                email: decoded.email,
-                username: decoded.username,
-                isAdmin: decoded.isAdmin || false,
-            };
-        }
+        assignUserContext(req, decoded);
         next();
     });
 };
@@ -48,13 +54,8 @@ export const optionalAuth = (req, res, next) => {
     if (token) {
         const secret = process.env.JWT_SECRET || 'fallback-secret';
         jwt.verify(token, secret, (err, decoded) => {
-            if (!err && typeof decoded === 'object' && decoded !== null) {
-                req.user = {
-                    id: decoded.sub || decoded.userId || decoded.id,
-                    email: decoded.email,
-                    username: decoded.username,
-                    isAdmin: decoded.isAdmin || false,
-                };
+            if (!err) {
+                assignUserContext(req, decoded);
             }
         });
     }

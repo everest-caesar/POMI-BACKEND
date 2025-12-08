@@ -4,8 +4,8 @@ interface EnsureAdminOptions {
   email: string
   password: string
   name: string
-  area: string
-  workOrSchool: string
+  area?: string
+  workOrSchool?: string
 }
 
 export const ensureAdminAccount = async ({
@@ -40,12 +40,12 @@ export const ensureAdminAccount = async ({
     needsSave = true
   }
 
-  if (!existing.area) {
+  if (area && !existing.area) {
     existing.area = area
     needsSave = true
   }
 
-  if (!existing.workOrSchool) {
+  if (workOrSchool && !existing.workOrSchool) {
     existing.workOrSchool = workOrSchool
     needsSave = true
   }
@@ -64,4 +64,3 @@ export const ensureAdminAccount = async ({
 }
 
 export default ensureAdminAccount
-

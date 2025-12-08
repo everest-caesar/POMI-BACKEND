@@ -3,23 +3,6 @@ import { validatePasswordStrength } from '../utils/bcrypt.js';
 import { validateRegistration, validateLogin, } from '../validators/auth.js';
 import User from '../models/User.js';
 import emailService from '../services/emailService.js';
-const OTTAWA_AREAS = [
-    'Downtown Ottawa',
-    'Barrhaven',
-    'Kanata',
-    'Nepean',
-    'Gloucester',
-    'Orleans',
-    'Vanier',
-    'Westboro',
-    'Rockcliffe Park',
-    'Sandy Hill',
-    'The Glebe',
-    'Bytown',
-    'South Ottawa',
-    'North Ottawa',
-    'Outside Ottawa',
-];
 const ADMIN_INVITE_CODE = process.env.ADMIN_INVITE_CODE;
 /**
  * Register new user
@@ -57,20 +40,10 @@ export const register = async (req, res) => {
             res.status(400).json({ error: 'Age must be between 13 and 120' });
             return;
         }
-        if (typeof rawArea !== 'string' || rawArea.trim() === '') {
-            res.status(400).json({ error: 'Area is required' });
-            return;
-        }
-        const trimmedArea = rawArea.trim();
-        if (!OTTAWA_AREAS.includes(trimmedArea)) {
-            res.status(400).json({ error: 'Please select a valid area' });
-            return;
-        }
-        if (typeof rawWorkOrSchool !== 'string' || rawWorkOrSchool.trim() === '') {
-            res.status(400).json({ error: 'School or workplace is required' });
-            return;
-        }
-        const trimmedWorkOrSchool = rawWorkOrSchool.trim();
+        const trimmedArea = typeof rawArea === 'string' && rawArea.trim() !== '' ? rawArea.trim() : undefined;
+        const trimmedWorkOrSchool = typeof rawWorkOrSchool === 'string' && rawWorkOrSchool.trim() !== ''
+            ? rawWorkOrSchool.trim()
+            : undefined;
         let isAdmin = false;
         if (adminInviteCode) {
             if (!ADMIN_INVITE_CODE) {
@@ -95,8 +68,8 @@ export const register = async (req, res) => {
             username,
             password, // Password will be hashed by the model's pre-save hook
             age: parsedAge,
-            area: trimmedArea,
-            workOrSchool: trimmedWorkOrSchool,
+            ...(trimmedArea ? { area: trimmedArea } : {}),
+            ...(trimmedWorkOrSchool ? { workOrSchool: trimmedWorkOrSchool } : {}),
             isAdmin,
         });
         console.log('📝 Before save:', {
@@ -184,6 +157,12 @@ export const login = async (req, res) => {
             isAdminType: typeof user.isAdmin,
             toJSON: user.toJSON?.(),
         });
+        if (user.isAdmin) {
+            res.status(403).json({
+                error: 'Admin accounts can only use the secure console to sign in.',
+            });
+            return;
+        }
         // Generate tokens
         const { accessToken } = generateTokenPair(user._id.toString(), user.email, user.username, user.isAdmin);
         res.status(200).json({

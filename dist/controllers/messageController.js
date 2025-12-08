@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import User from '../models/User.js';
+import Listing from '../models/Listing.js';
+import emailService from '../services/emailService.js';
 const isValidObjectId = (value) => {
     if (!value)
         return false;
@@ -12,7 +14,7 @@ const isValidObjectId = (value) => {
  */
 export const sendMessage = async (req, res) => {
     try {
-        const { recipientId, content, listingId } = req.body;
+        const { recipientId, content, listingId, clientMessageId } = req.body;
         const senderId = req.userId;
         if (!senderId) {
             res.status(401).json({ error: 'Unauthorized' });
@@ -58,10 +60,66 @@ export const sendMessage = async (req, res) => {
             recipientId,
             recipientName: recipient.username,
             listingId: listingId || undefined,
+            clientMessageId: clientMessageId || null,
             content: content.trim(),
             isRead: false,
         });
         await message.save();
+        const queueNotificationEmail = () => {
+            if (!recipient.email) {
+                return;
+            }
+            void (async () => {
+                try {
+                    let listingSummary = null;
+                    if (message.listingId) {
+                        const listingDoc = await Listing.findById(message.listingId).select('title price location');
+                        if (listingDoc) {
+                            listingSummary = {
+                                title: typeof listingDoc.title === 'string' ? listingDoc.title : null,
+                                price: typeof listingDoc.price === 'number' ? Number(listingDoc.price) : null,
+                                location: typeof listingDoc.location === 'string' ? listingDoc.location : null,
+                            };
+                        }
+                    }
+                    await emailService.sendMessageNotification({
+                        recipientEmail: recipient.email,
+                        recipientName: recipient.username,
+                        senderName: sender.username,
+                        messageSnippet: message.content,
+                        listingTitle: listingSummary?.title ?? null,
+                        listingPrice: listingSummary?.price ?? null,
+                        listingLocation: listingSummary?.location ?? null,
+                    });
+                }
+                catch (notifyError) {
+                    console.error('Message notification email failed:', notifyError);
+                }
+            })();
+        };
+        const io = req.app.get('io');
+        if (io) {
+            const payload = {
+                _id: message._id.toString(),
+                senderId: senderId.toString(),
+                senderName: sender.username,
+                content: message.content,
+                listingId: message.listingId ? message.listingId.toString() : undefined,
+                timestamp: message.createdAt,
+                clientMessageId: message.clientMessageId || null,
+                isRead: false,
+            };
+            io.to(recipientId.toString()).emit('message:receive', payload);
+            io.to(senderId.toString()).emit('message:sent', {
+                _id: message._id.toString(),
+                recipientId: recipientId.toString(),
+                content: message.content,
+                timestamp: message.createdAt,
+                listingId: message.listingId ? message.listingId.toString() : null,
+                clientMessageId: message.clientMessageId || null,
+            });
+        }
+        queueNotificationEmail();
         res.status(201).json({
             message: 'Message sent successfully',
             data: message,
@@ -350,6 +408,113 @@ export const markAsRead = async (req, res) => {
     catch (error) {
         console.error('Mark as read error:', error);
         res.status(500).json({ error: 'Failed to mark message as read' });
+    }
+};
+/**
+ * Get admin messages for current user
+ * GET /api/v1/messages/admin/inbox
+ */
+export const getAdminInbox = async (req, res) => {
+    try {
+        const userId = req.userId;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        if (!isValidObjectId(userId)) {
+            res.status(400).json({ error: 'Invalid user ID' });
+            return;
+        }
+        const adminUsers = await User.find({ isAdmin: true }).select('_id username').lean();
+        if (!adminUsers.length) {
+            res.status(404).json({ error: 'Admin account not configured' });
+            return;
+        }
+        const adminIds = adminUsers.map((admin) => admin._id);
+        // Get full conversation between the member and any admin identity
+        const messages = await Message.find({
+            $or: [
+                { senderId: { $in: adminIds }, recipientId: userId },
+                { senderId: userId, recipientId: { $in: adminIds } },
+            ],
+        })
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .lean();
+        // Mark admin messages as read now that they've been surfaced
+        await Message.updateMany({
+            senderId: { $in: adminIds },
+            recipientId: userId,
+            isAdminMessage: true,
+            isRead: false,
+        }, { $set: { isRead: true, readAt: new Date() } }).catch((updateError) => console.error('Failed to mark admin messages as read:', updateError));
+        const normalized = messages.map((message) => ({
+            id: message._id.toString(),
+            senderId: message.senderId.toString(),
+            senderName: message.senderName,
+            recipientId: message.recipientId.toString(),
+            recipientName: message.recipientName,
+            content: message.content,
+            createdAt: message.createdAt,
+            isAdminMessage: message.isAdminMessage,
+            isRead: message.isRead,
+        }));
+        res.status(200).json({
+            data: normalized,
+            count: normalized.length,
+        });
+    }
+    catch (error) {
+        console.error('Get admin inbox error:', error);
+        res.status(500).json({ error: 'Failed to fetch admin messages' });
+    }
+};
+/**
+ * Send message to admin (user reply to admin team)
+ * POST /api/v1/messages/admin/reply
+ */
+export const sendAdminReply = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { content } = req.body;
+        if (!userId) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        if (!content || !content.trim()) {
+            res.status(400).json({ error: 'Message content is required' });
+            return;
+        }
+        // Get sender info
+        const sender = await User.findById(userId);
+        if (!sender) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        // Find an admin user to send the message to
+        const admin = await User.findOne({ isAdmin: true });
+        if (!admin) {
+            res.status(404).json({ error: 'Admin not found' });
+            return;
+        }
+        // Create message to admin
+        const message = await Message.create({
+            senderId: userId,
+            senderName: sender.username,
+            recipientId: admin._id,
+            recipientName: 'Admin Team',
+            content: content.trim(),
+            isRead: false,
+            isAdminMessage: false, // Regular message from user to admin
+        });
+        res.status(201).json({
+            message: 'Message sent to admin team',
+            data: message,
+        });
+    }
+    catch (error) {
+        console.error('Send admin reply error:', error);
+        res.status(500).json({ error: 'Failed to send message to admin' });
     }
 };
 //# sourceMappingURL=messageController.js.map

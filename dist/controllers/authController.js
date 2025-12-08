@@ -6,25 +6,8 @@ const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Pomi Admin';
-const ADMIN_AREA = process.env.ADMIN_AREA || 'Downtown Ottawa';
-const ADMIN_WORK = process.env.ADMIN_WORK || 'Community Leadership Team';
-const OTTAWA_AREAS = [
-    'Downtown Ottawa',
-    'Barrhaven',
-    'Kanata',
-    'Nepean',
-    'Gloucester',
-    'Orleans',
-    'Vanier',
-    'Westboro',
-    'Rockcliffe Park',
-    'Sandy Hill',
-    'The Glebe',
-    'Bytown',
-    'South Ottawa',
-    'North Ottawa',
-    'Outside Ottawa',
-];
+const ADMIN_AREA = process.env.ADMIN_AREA || '';
+const ADMIN_WORK = process.env.ADMIN_WORK || '';
 // Generate JWT token
 const generateToken = (userId) => {
     return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRE });
@@ -71,25 +54,23 @@ export const register = async (req, res) => {
             return res.status(400).json({ error: 'Age must be between 13 and 120' });
         }
         parsedAge = numericAge;
-        if (typeof rawArea !== 'string' || rawArea.trim() === '') {
-            return res.status(400).json({ error: 'Area is required' });
+        // Optional: area and workOrSchool fields
+        let trimmedArea;
+        let parsedWorkOrSchool;
+        if (rawArea && typeof rawArea === 'string' && rawArea.trim() !== '') {
+            trimmedArea = rawArea.trim();
         }
-        const trimmedArea = rawArea.trim();
-        if (!OTTAWA_AREAS.includes(trimmedArea)) {
-            return res.status(400).json({ error: 'Please select a valid area' });
+        if (rawWorkOrSchool && typeof rawWorkOrSchool === 'string' && rawWorkOrSchool.trim() !== '') {
+            parsedWorkOrSchool = rawWorkOrSchool.trim();
         }
-        if (typeof rawWorkOrSchool !== 'string' || rawWorkOrSchool.trim() === '') {
-            return res.status(400).json({ error: 'School or workplace is required' });
-        }
-        const parsedWorkOrSchool = rawWorkOrSchool.trim();
         // Create new user
         const newUser = new User({
             email: normalizedEmail,
             password,
             username,
             age: parsedAge,
-            area: trimmedArea,
-            workOrSchool: parsedWorkOrSchool,
+            ...(trimmedArea && { area: trimmedArea }),
+            ...(parsedWorkOrSchool && { workOrSchool: parsedWorkOrSchool }),
             isAdmin: false,
         });
         await newUser.save();
@@ -135,12 +116,11 @@ export const login = async (req, res) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
         const normalizedEmail = email.toLowerCase();
-        // TEMPORARILY DISABLED FOR DEVELOPMENT: Admin can login via regular endpoint
-        // if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL) {
-        //   return res.status(403).json({
-        //     error: 'Please use the secure admin console to sign in with this credential.',
-        //   });
-        // }
+        if (ADMIN_EMAIL && normalizedEmail === ADMIN_EMAIL) {
+            return res.status(403).json({
+                error: 'Admin access is restricted. Use the dedicated admin console to sign in.',
+            });
+        }
         // Find user (need to include password field for comparison)
         const user = await User.findOne({ email: normalizedEmail }).select('+password');
         if (!user) {
@@ -150,6 +130,11 @@ export const login = async (req, res) => {
         const isPasswordValid = await user.comparePassword(password);
         if (!isPasswordValid) {
             return res.status(401).json({ error: 'Invalid email or password' });
+        }
+        if (user.isAdmin) {
+            return res.status(403).json({
+                error: 'Admin accounts must use the secure admin console to sign in.',
+            });
         }
         // Generate token
         const token = generateToken(user._id.toString());

@@ -24,6 +24,11 @@ const messageSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Listing',
     },
+    clientMessageId: {
+        type: String,
+        index: true,
+        default: null,
+    },
     content: {
         type: String,
         required: [true, 'Message content is required'],

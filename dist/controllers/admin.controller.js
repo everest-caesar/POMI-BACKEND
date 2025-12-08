@@ -467,4 +467,36 @@ export const broadcastAdminMessage = async (req, res) => {
         res.status(500).json({ error: 'Failed to broadcast admin message' });
     }
 };
+/**
+ * Get user messages/replies to admin (inbox for admin)
+ * GET /api/v1/admin/messages/inbox
+ */
+export const getAdminInbox = async (req, res) => {
+    try {
+        const adminId = req.userId;
+        // Verify user is admin
+        const admin = await User.findById(adminId);
+        if (!admin || !admin.isAdmin) {
+            res.status(403).json({ error: 'Unauthorized: Admin access required' });
+            return;
+        }
+        // Get all messages where admin is the recipient (messages FROM users TO admin)
+        const messages = await Message.find({
+            recipientId: adminId,
+            isAdminMessage: false, // Regular messages from users, not admin-sent messages
+        })
+            .populate('senderId', 'username email')
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .lean();
+        res.status(200).json({
+            data: messages,
+            count: messages.length,
+        });
+    }
+    catch (error) {
+        console.error('Get admin inbox error:', error);
+        res.status(500).json({ error: 'Failed to fetch admin inbox' });
+    }
+};
 //# sourceMappingURL=admin.controller.js.map

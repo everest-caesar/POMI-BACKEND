@@ -20,11 +20,11 @@ export const ensureAdminAccount = async ({ email, password, name, area, workOrSc
         existing.username = name;
         needsSave = true;
     }
-    if (!existing.area) {
+    if (area && !existing.area) {
         existing.area = area;
         needsSave = true;
     }
-    if (!existing.workOrSchool) {
+    if (workOrSchool && !existing.workOrSchool) {
         existing.workOrSchool = workOrSchool;
         needsSave = true;
     }

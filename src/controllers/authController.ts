@@ -8,26 +8,8 @@ const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Pomi Admin';
-const ADMIN_AREA = process.env.ADMIN_AREA || 'Downtown Ottawa';
-const ADMIN_WORK = process.env.ADMIN_WORK || 'Community Leadership Team';
-
-const OTTAWA_AREAS = [
-  'Downtown Ottawa',
-  'Barrhaven',
-  'Kanata',
-  'Nepean',
-  'Gloucester',
-  'Orleans',
-  'Vanier',
-  'Westboro',
-  'Rockcliffe Park',
-  'Sandy Hill',
-  'The Glebe',
-  'Bytown',
-  'South Ottawa',
-  'North Ottawa',
-  'Outside Ottawa',
-];
+const ADMIN_AREA = process.env.ADMIN_AREA || '';
+const ADMIN_WORK = process.env.ADMIN_WORK || '';
 
 // Generate JWT token
 const generateToken = (userId: string): string => {
@@ -90,9 +72,6 @@ export const register = async (req: Request, res: Response) => {
 
     if (rawArea && typeof rawArea === 'string' && rawArea.trim() !== '') {
       trimmedArea = rawArea.trim();
-      if (!OTTAWA_AREAS.includes(trimmedArea)) {
-        return res.status(400).json({ error: 'Please select a valid area' });
-      }
     }
 
     if (rawWorkOrSchool && typeof rawWorkOrSchool === 'string' && rawWorkOrSchool.trim() !== '') {
@@ -177,6 +156,12 @@ export const login = async (req: Request, res: Response) => {
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (user.isAdmin) {
+      return res.status(403).json({
+        error: 'Admin accounts must use the secure admin console to sign in.',
+      });
     }
 
     // Generate token

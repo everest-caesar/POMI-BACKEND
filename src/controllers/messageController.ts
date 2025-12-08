@@ -505,18 +505,53 @@ export const getAdminInbox = async (
       return;
     }
 
-    // Get all admin messages sent to this user
+    const adminUsers = await User.find({ isAdmin: true }).select('_id username').lean();
+    if (!adminUsers.length) {
+      res.status(404).json({ error: 'Admin account not configured' });
+      return;
+    }
+
+    const adminIds = adminUsers.map((admin) => admin._id);
+
+    // Get full conversation between the member and any admin identity
     const messages = await Message.find({
-      recipientId: userId,
-      isAdminMessage: true,
+      $or: [
+        { senderId: { $in: adminIds }, recipientId: userId },
+        { senderId: userId, recipientId: { $in: adminIds } },
+      ],
     })
       .sort({ createdAt: -1 })
-      .limit(50)
+      .limit(100)
       .lean();
 
+    // Mark admin messages as read now that they've been surfaced
+    await Message.updateMany(
+      {
+        senderId: { $in: adminIds },
+        recipientId: userId,
+        isAdminMessage: true,
+        isRead: false,
+      },
+      { $set: { isRead: true, readAt: new Date() } }
+    ).catch((updateError) =>
+      console.error('Failed to mark admin messages as read:', updateError)
+    );
+
+    const normalized = messages.map((message) => ({
+      id: message._id.toString(),
+      senderId: message.senderId.toString(),
+      senderName: message.senderName,
+      recipientId: message.recipientId.toString(),
+      recipientName: message.recipientName,
+      content: message.content,
+      createdAt: message.createdAt,
+      isAdminMessage: message.isAdminMessage,
+      isRead: message.isRead,
+    }));
+
     res.status(200).json({
-      data: messages,
-      count: messages.length,
+      data: normalized,
+      count: normalized.length,
     });
   } catch (error: any) {
     console.error('Get admin inbox error:', error);

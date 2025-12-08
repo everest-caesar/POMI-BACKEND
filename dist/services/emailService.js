@@ -2,12 +2,37 @@ import sgMail from '@sendgrid/mail';
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'marakihay@gmail.com';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'marakihay@gmail.com';
+const APP_BASE_URL = process.env.APP_BASE_URL ||
+    process.env.FRONTEND_APP_URL ||
+    'https://pomi-community.netlify.app';
 if (SENDGRID_API_KEY) {
     sgMail.setApiKey(SENDGRID_API_KEY);
 }
 else {
     console.warn('⚠️  SENDGRID_API_KEY not configured. Emails will not be sent.');
 }
+const escapeHtml = (value) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+const formatMessagePreview = (value) => {
+    if (!value)
+        return '';
+    const trimmed = value.trim().slice(0, 500);
+    return escapeHtml(trimmed);
+};
+const formatCad = (value) => {
+    if (typeof value !== 'number') {
+        return null;
+    }
+    return new Intl.NumberFormat('en-CA', {
+        style: 'currency',
+        currency: 'CAD',
+        maximumFractionDigits: 0,
+    }).format(value);
+};
 /**
  * Send email using SendGrid API
  */
@@ -34,6 +59,78 @@ const sendEmail = async (options) => {
         console.error('❌ Failed to send email:', sendGridErrors || error.message || error);
         return false;
     }
+};
+/**
+ * Notify recipients about a new direct message so they don't miss updates
+ */
+const sendMessageNotification = async (options) => {
+    if (!options.recipientEmail) {
+        return false;
+    }
+    const preview = formatMessagePreview(options.messageSnippet);
+    const cadPrice = formatCad(options.listingPrice);
+    const conversationUrl = options.conversationUrl ||
+        `${APP_BASE_URL.replace(/\/$/, '')}/messages`;
+    const listingDetails = options.listingTitle || cadPrice || options.listingLocation
+        ? `
+        <div style="margin-top: 18px; padding: 16px; background: #fff7ed; border-radius: 12px; border-left: 4px solid #fb923c;">
+          <p style="margin: 0 0 6px; font-size: 13px; color: #9a3412; text-transform: uppercase; letter-spacing: 0.08em;">Marketplace context</p>
+          ${options.listingTitle
+            ? `<p style="margin: 4px 0;"><strong>Listing:</strong> ${escapeHtml(options.listingTitle)}</p>`
+            : ''}
+          ${cadPrice
+            ? `<p style="margin: 4px 0;"><strong>Price:</strong> ${cadPrice}</p>`
+            : ''}
+          ${options.listingLocation
+            ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${escapeHtml(options.listingLocation)}</p>`
+            : ''}
+        </div>
+      `
+        : '';
+    const html = `
+    <div style="font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #0f172a; background: #f8fafc; padding: 24px;">
+      <div style="max-width: 640px; margin: 0 auto; background: white; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.15); overflow: hidden;">
+        <div style="padding: 24px; background: linear-gradient(120deg, #f97316, #ef4444, #db2777); color: white;">
+          <p style="margin: 0; font-size: 12px; letter-spacing: 0.45em; text-transform: uppercase; opacity: 0.85;">Pomi Direct Messages</p>
+          <h1 style="margin: 8px 0 0; font-size: 26px; font-weight: 800;">New message from ${escapeHtml(options.senderName)}</h1>
+        </div>
+
+        <div style="padding: 28px;">
+          <p style="margin: 0 0 12px;">Selam ${escapeHtml(options.recipientName)},</p>
+          <p style="margin: 0 0 18px; color: #475569;">
+            You have a new direct message waiting inside Pomi. We email you so sellers, buyers, and neighbours never miss an update.
+          </p>
+
+          <div style="margin: 16px 0; padding: 18px 20px; background: #0f172a; color: white; border-radius: 16px;">
+            <p style="margin: 0; font-size: 13px; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.65);">Message preview</p>
+            <p style="margin: 8px 0 0; font-size: 15px; line-height: 1.6; white-space: pre-line;">${preview || 'New message received.'}</p>
+          </div>
+
+          ${listingDetails}
+
+          <p style="margin: 24px 0;">
+            <a href="${conversationUrl}" style="display: inline-flex; align-items: center; gap: 8px; background: #f97316; color: white; text-decoration: none; padding: 14px 28px; border-radius: 999px; font-weight: 700;">
+              Reply in Pomi
+              <span style="font-size: 18px;">→</span>
+            </a>
+          </p>
+
+          <p style="margin: 0; font-size: 13px; color: #64748b;">
+            Tip: Reply promptly to keep community exchanges safe and respectful. This email is a notification only—please respond inside Pomi to keep your messages secure.
+          </p>
+        </div>
+      </div>
+
+      <p style="text-align: center; font-size: 12px; color: #94a3b8; margin-top: 18px;">
+        © ${new Date().getFullYear()} Pomi Community Hub • Built for Ethiopian & Eritrean neighbours in Ottawa
+      </p>
+    </div>
+  `;
+    return sendEmail({
+        to: options.recipientEmail,
+        subject: `You have a new message from ${options.senderName}`,
+        html,
+    });
 };
 /**
  * Welcome email template for new users
@@ -232,6 +329,7 @@ const sendListingSubmissionNotification = async (listingTitle, listingPrice, sel
 };
 export default {
     sendEmail,
+    sendMessageNotification,
     sendWelcomeEmail,
     sendEventCreationNotification,
     sendBusinessSubmissionNotification,

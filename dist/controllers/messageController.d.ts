@@ -25,4 +25,14 @@ export declare const getUnreadCount: (req: AuthRequest, res: Response) => Promis
  * PATCH /api/v1/messages/:messageId/read
  */
 export declare const markAsRead: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Get admin messages for current user
+ * GET /api/v1/messages/admin/inbox
+ */
+export declare const getAdminInbox: (req: AuthRequest, res: Response) => Promise<void>;
+/**
+ * Send message to admin (user reply to admin team)
+ * POST /api/v1/messages/admin/reply
+ */
+export declare const sendAdminReply: (req: AuthRequest, res: Response) => Promise<void>;
 //# sourceMappingURL=messageController.d.ts.map

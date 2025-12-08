@@ -4,8 +4,19 @@ interface SendEmailOptions {
     html: string;
     from?: string;
 }
+interface MessageNotificationOptions {
+    recipientEmail: string;
+    recipientName: string;
+    senderName: string;
+    messageSnippet: string;
+    conversationUrl?: string;
+    listingTitle?: string | null;
+    listingPrice?: number | null;
+    listingLocation?: string | null;
+}
 declare const _default: {
     sendEmail: (options: SendEmailOptions) => Promise<boolean>;
+    sendMessageNotification: (options: MessageNotificationOptions) => Promise<boolean>;
     sendWelcomeEmail: (email: string, username: string) => Promise<boolean>;
     sendEventCreationNotification: (eventTitle: string, eventDate: string, organizerName: string, organizerEmail: string) => Promise<boolean>;
     sendBusinessSubmissionNotification: (businessName: string, category: string, ownerName: string, ownerEmail: string) => Promise<boolean>;

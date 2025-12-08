@@ -1,6 +1,6 @@
 import mongoose, { Document } from 'mongoose';
 export interface IEvent extends Document {
-    _id: string;
+    _id: mongoose.Types.ObjectId;
     title: string;
     description: string;
     location: string;
@@ -27,7 +27,7 @@ export interface IEvent extends Document {
     updatedAt: Date;
 }
 declare const Event: mongoose.Model<IEvent, {}, {}, {}, mongoose.Document<unknown, {}, IEvent, {}, {}> & IEvent & Required<{
-    _id: string;
+    _id: mongoose.Types.ObjectId;
 }> & {
     __v: number;
 }, any>;
