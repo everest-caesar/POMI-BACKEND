@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/27</span>
+                <span class='fraction'>0/25</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/27</span>
+                <span class='fraction'>0/25</span>
             </div>
         
             
@@ -118,26 +118,24 @@
 <a name='L53'></a><a href='#L53'>53</a>
 <a name='L54'></a><a href='#L54'>54</a>
 <a name='L55'></a><a href='#L55'>55</a>
-<a name='L56'></a><a href='#L56'>56</a>
-<a name='L57'></a><a href='#L57'>57</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L56'></a><a href='#L56'>56</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -177,7 +175,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import express, { Express, Request, Response } from 'express';</span>
 <span class="cstat-no" title="statement not covered" >import cors from 'cors';</span>
-<span class="cstat-no" title="statement not covered" >import helmet from 'helmet';</span>
+import helmet from 'helmet';
 <span class="cstat-no" title="statement not covered" >import mongoose from 'mongoose';</span>
 <span class="cstat-no" title="statement not covered" >import 'dotenv/config';</span>
 <span class="cstat-no" title="statement not covered" >import apiRoutes from './routes/index.js';</span>
@@ -187,13 +185,12 @@ const PORT = <span class="cstat-no" title="statement not covered" >process.env.P
 const MONGODB_URI = <span class="cstat-no" title="statement not covered" >process.env.MONGODB_URI || 'mongodb://pomi_user:pomi_password@localhost:27017/pomi?authSource=admin';</span>
 &nbsp;
 // Middleware
-<span class="cstat-no" title="statement not covered" >app.use(helmet());</span>
+<span class="cstat-no" title="statement not covered" >app.use(express.json());</span>
+<span class="cstat-no" title="statement not covered" >app.use(express.urlencoded({ extended: true }));</span>
 <span class="cstat-no" title="statement not covered" >app.use(cors({</span>
   origin: process.env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
-<span class="cstat-no" title="statement not covered" >app.use(express.json());</span>
-<span class="cstat-no" title="statement not covered" >app.use(express.urlencoded({ extended: true }));</span>
 &nbsp;
 // MongoDB Connection
 const connectDB = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>() =&gt; {</span>
@@ -223,7 +220,7 @@ const connectDB = <span class="cstat-no" title="statement not covered" ><span cl
 <span class="cstat-no" title="statement not covered" >app.use('/api/v1', apiRoutes);</span>
 &nbsp;
 // Error handling middleware
-<span class="cstat-no" title="statement not covered" >app.use(<span class="fstat-no" title="function not covered" >(e</span>rr: any, req: Request, res: Response) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >app.use(<span class="fstat-no" title="function not covered" >(e</span>rr: any, req: Request, res: Response, next: any) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  console.error(err);</span>
 <span class="cstat-no" title="statement not covered" >  res.status(500).json({ error: 'Internal Server Error' });</span>
 });
@@ -238,7 +235,7 @@ const connectDB = <span class="cstat-no" title="statement not covered" ><span cl
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-30T19:15:17.803Z
+                at 2025-11-22T11:59:19.589Z
             </div>
         <script src="../prettify.js"></script>
         <script>

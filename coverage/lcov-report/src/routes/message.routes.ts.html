@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for src/routes/marketplace.routes.ts</title>
+    <title>Code coverage report for src/routes/message.routes.ts</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../../prettify.css" />
     <link rel="stylesheet" href="../../base.css" />
@@ -19,13 +19,13 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/routes</a> marketplace.routes.ts</h1>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/routes</a> message.routes.ts</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/13</span>
+                <span class='fraction'>0/11</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/13</span>
+                <span class='fraction'>0/11</span>
             </div>
         
             
@@ -92,29 +92,33 @@
 <a name='L27'></a><a href='#L27'>27</a>
 <a name='L28'></a><a href='#L28'>28</a>
 <a name='L29'></a><a href='#L29'>29</a>
-<a name='L30'></a><a href='#L30'>30</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -123,31 +127,33 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import { Router } from 'express';</span>
 <span class="cstat-no" title="statement not covered" >import { authenticate } from '../middleware/authMiddleware.js';</span>
-<span class="cstat-no" title="statement not covered" >import { uploadMultipleImages } from '../middleware/uploadMiddleware.js';</span>
 <span class="cstat-no" title="statement not covered" >import {</span>
-  createListing,
-  listListings,
-  getListing,
-  updateListing,
-  deleteListing,
-  favoriteListing,
-  uploadListingImages,
-} from '../controllers/marketplace.controller.js';
+  sendMessage,
+  getConversation,
+  getConversations,
+  getUnreadCount,
+  markAsRead,
+} from '../controllers/messageController.js';
 &nbsp;
 const router = <span class="cstat-no" title="statement not covered" >Router();</span>
 &nbsp;
-// Public routes
-<span class="cstat-no" title="statement not covered" >router.get('/listings', listListings);</span>
-<span class="cstat-no" title="statement not covered" >router.get('/listings/:id', getListing);</span>
+// All routes require authentication
+<span class="cstat-no" title="statement not covered" >router.use(authenticate);</span>
 &nbsp;
-// Private routes
-<span class="cstat-no" title="statement not covered" >router.post('/listings', authenticate, createListing);</span>
-<span class="cstat-no" title="statement not covered" >router.put('/listings/:id', authenticate, updateListing);</span>
-<span class="cstat-no" title="statement not covered" >router.delete('/listings/:id', authenticate, deleteListing);</span>
-<span class="cstat-no" title="statement not covered" >router.post('/listings/:id/favorite', authenticate, favoriteListing);</span>
+// Send a message
+<span class="cstat-no" title="statement not covered" >router.post('/', sendMessage);</span>
 &nbsp;
-// Image upload route
-<span class="cstat-no" title="statement not covered" >router.post('/upload', authenticate, uploadMultipleImages, uploadListingImages);</span>
+// Get list of all conversations
+<span class="cstat-no" title="statement not covered" >router.get('/', getConversations);</span>
+&nbsp;
+// Get unread message count
+<span class="cstat-no" title="statement not covered" >router.get('/unread/count', getUnreadCount);</span>
+&nbsp;
+// Get messages with a specific user
+<span class="cstat-no" title="statement not covered" >router.get('/:recipientId', getConversation);</span>
+&nbsp;
+// Mark message as read
+<span class="cstat-no" title="statement not covered" >router.patch('/:messageId/read', markAsRead);</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >export default router;</span>
 &nbsp;</pre></td></tr></table></pre>
