@@ -7,6 +7,11 @@ const PBKDF2_DIGEST = 'sha256'
 const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 5
 
+// Account lockout settings
+export const MAX_LOGIN_ATTEMPTS = 5
+export const LOCKOUT_DURATION_MINUTES = 15
+export const LOCKOUT_DURATION_MS = LOCKOUT_DURATION_MINUTES * 60 * 1000
+
 const rateLimitStore = new Map<string, number[]>()
 const csrfStore = new Map<string, number>()
 

@@ -4,6 +4,10 @@ const PBKDF2_KEY_LEN = 64;
 const PBKDF2_DIGEST = 'sha256';
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 5;
+// Account lockout settings
+export const MAX_LOGIN_ATTEMPTS = 5;
+export const LOCKOUT_DURATION_MINUTES = 15;
+export const LOCKOUT_DURATION_MS = LOCKOUT_DURATION_MINUTES * 60 * 1000;
 const rateLimitStore = new Map();
 const csrfStore = new Map();
 export function hashPasswordPBKDF2(password) {

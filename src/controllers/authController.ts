@@ -9,6 +9,10 @@ import {
   isRateLimited,
   issueCsrfToken,
   validateCsrfToken,
+  validatePasswordStrength,
+  MAX_LOGIN_ATTEMPTS,
+  LOCKOUT_DURATION_MS,
+  LOCKOUT_DURATION_MINUTES,
 } from '../utils/security.js';
 import emailService from '../services/emailService.js';
 
@@ -49,9 +53,13 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    // Password length validation
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    // Strong password validation
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({
+        error: passwordValidation.errors[0],
+        passwordErrors: passwordValidation.errors
+      });
     }
 
     // Check if user already exists
@@ -143,6 +151,16 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
+    // Get client IP for rate limiting
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+
+    // Rate limiting by IP
+    if (isRateLimited(`login:${clientIp}`)) {
+      return res.status(429).json({
+        error: 'Too many login attempts. Please try again later.'
+      });
+    }
+
     // Validation
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -156,15 +174,41 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Find user (need to include password field for comparison)
-    const user = await User.findOne({ email: normalizedEmail }).select('+password');
+    const user = await User.findOne({ email: normalizedEmail }).select('+password +failedLoginAttempts +lockUntil');
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Check account lockout
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const remainingMinutes = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000);
+      return res.status(429).json({
+        error: `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`,
+      });
     }
 
     // Compare passwords
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      // Record failed login attempt
+      const failedAttempts = (user.failedLoginAttempts || 0) + 1;
+
+      if (failedAttempts >= MAX_LOGIN_ATTEMPTS) {
+        // Lock the account
+        user.failedLoginAttempts = failedAttempts;
+        user.lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+        await user.save();
+        return res.status(429).json({
+          error: `Too many failed attempts. Account locked for ${LOCKOUT_DURATION_MINUTES} minutes.`,
+        });
+      } else {
+        user.failedLoginAttempts = failedAttempts;
+        await user.save();
+        const attemptsRemaining = MAX_LOGIN_ATTEMPTS - failedAttempts;
+        return res.status(401).json({
+          error: `Invalid email or password. ${attemptsRemaining} attempt(s) remaining.`
+        });
+      }
     }
 
     if (user.isAdmin) {
@@ -173,8 +217,100 @@ export const login = async (req: Request, res: Response) => {
       });
     }
 
+    // Password verified - now send 2FA verification code
+    // Clear failed attempts on successful password
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+    await user.save();
+
+    // Generate and send verification code for 2FA
+    const code = generateVerificationCode();
+    const codeHash = hashVerificationCode(code);
+
+    // Remove any existing login tokens for this email
+    await VerificationToken.deleteMany({ email: normalizedEmail, type: 'login' });
+
+    // Create new verification token (expires in 10 minutes)
+    await VerificationToken.create({
+      email: normalizedEmail,
+      type: 'login',
+      codeHash,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    // Send verification code via SendGrid
+    const emailSent = await emailService.sendVerificationCodeEmail(normalizedEmail, code, 'login');
+
+    if (!emailSent) {
+      console.warn('Failed to send verification code email, but continuing with login flow');
+    }
+
+    // Return response indicating 2FA is required
+    res.status(200).json({
+      message: 'Verification code sent to your email',
+      requiresVerification: true,
+      email: normalizedEmail,
+    });
+  } catch (error: any) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+};
+
+// Verify login code (2FA step 2)
+export const verifyLoginCode = async (req: Request, res: Response) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find the verification token
+    const token = await VerificationToken.findOne({
+      email: normalizedEmail,
+      type: 'login',
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!token) {
+      return res.status(400).json({ error: 'Invalid or expired verification code. Please login again.' });
+    }
+
+    // Check max attempts
+    if (token.attempts >= 5) {
+      await VerificationToken.deleteOne({ _id: token._id });
+      return res.status(400).json({ error: 'Too many failed attempts. Please login again.' });
+    }
+
+    // Verify the code
+    const codeHash = hashVerificationCode(code);
+    if (codeHash !== token.codeHash) {
+      token.attempts += 1;
+      await token.save();
+      const attemptsRemaining = 5 - token.attempts;
+      return res.status(400).json({
+        error: `Invalid verification code. ${attemptsRemaining} attempt(s) remaining.`
+      });
+    }
+
+    // Code verified - delete token
+    await VerificationToken.deleteOne({ _id: token._id });
+
+    // Find user and generate JWT
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update lastLogin
+    user.lastLogin = new Date();
+    await user.save();
+
     // Generate token
-    const token = generateToken(user._id.toString());
+    const jwtToken = generateToken(user._id.toString());
 
     // Return user data without password
     const userWithoutPassword = {
@@ -190,12 +326,12 @@ export const login = async (req: Request, res: Response) => {
 
     res.status(200).json({
       message: 'Login successful',
-      token,
+      token: jwtToken,
       user: userWithoutPassword,
     });
   } catch (error: any) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Verify login code error:', error);
+    res.status(500).json({ error: 'Verification failed' });
   }
 };
 

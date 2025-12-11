@@ -2,7 +2,7 @@ import sgMail from '@sendgrid/mail';
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'marakihay@gmail.com';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'marakihay@gmail.com';
+const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || process.env.FROM_EMAIL || 'marakihay@gmail.com';
 const APP_BASE_URL =
   process.env.APP_BASE_URL ||
   process.env.FRONTEND_APP_URL ||

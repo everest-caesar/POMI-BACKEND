@@ -1,3 +1,6 @@
+export declare const MAX_LOGIN_ATTEMPTS = 5;
+export declare const LOCKOUT_DURATION_MINUTES = 15;
+export declare const LOCKOUT_DURATION_MS: number;
 export type VerificationCodeType = 'signup' | 'login' | 'password_reset';
 export declare function hashPasswordPBKDF2(password: string): string;
 export declare function isPBKDF2Hash(value: string): boolean;
