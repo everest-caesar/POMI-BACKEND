@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.js';
 import Business from '../models/Business.js';
 import User from '../models/User.js';
+import BusinessReview from '../models/BusinessReview.js';
 import { uploadBusinessImages as uploadBusinessImagesToStorage } from '../services/storageService.js';
 
 /**
@@ -228,20 +229,84 @@ export const getBusinessReviews = async (
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
 
-    // For now, return empty reviews as Review model doesn't exist
-    const reviews: any[] = [];
+    const [reviews, total] = await Promise.all([
+      BusinessReview.find({ businessId: id })
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      BusinessReview.countDocuments({ businessId: id }),
+    ]);
 
     res.status(200).json({
       data: reviews,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: reviews.length,
+        total,
       },
     });
   } catch (error) {
     console.error('Get reviews error:', error);
     res.status(500).json({ error: 'Failed to get reviews' });
+  }
+};
+
+export const addBusinessReview = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { rating, comment } = req.body;
+    if (!rating || !comment || String(comment).trim().length < 5) {
+      res.status(400).json({ error: 'Rating and comment are required' });
+      return;
+    }
+
+    const parsedRating = Math.min(5, Math.max(1, Number(rating)));
+
+    const [business, user] = await Promise.all([
+      Business.findById(id),
+      User.findById(userId),
+    ]);
+
+    if (!business) {
+      res.status(404).json({ error: 'Business not found' });
+      return;
+    }
+
+    const review = await BusinessReview.create({
+      businessId: business._id,
+      authorId: user?._id,
+      authorName: user?.username || 'Community member',
+      rating: parsedRating,
+      comment: String(comment).trim(),
+      verified: Boolean(user?.isAdmin || business.verified),
+    });
+
+    const currentCount = business.reviewCount || 0;
+    const currentTotal = (business.rating || 0) * currentCount;
+    const nextCount = currentCount + 1;
+    const nextRating = Number(((currentTotal + parsedRating) / nextCount).toFixed(1));
+
+    business.reviewCount = nextCount;
+    business.rating = nextRating;
+    await business.save();
+
+    res.status(201).json({
+      message: 'Review submitted successfully',
+      review,
+      business,
+    });
+  } catch (error) {
+    console.error('Create review error:', error);
+    res.status(500).json({ error: 'Failed to submit review' });
   }
 };
 

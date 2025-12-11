@@ -10,6 +10,7 @@ export interface IForumPost extends Document {
   repliesCount: number;
   viewsCount: number;
   votes: number;
+  reports: number;
   status: 'published' | 'archived' | 'deleted';
   createdAt: Date;
   updatedAt: Date;
@@ -76,6 +77,11 @@ const forumPostSchema = new Schema<IForumPost>(
     votes: {
       type: Number,
       default: 0,
+    },
+    reports: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     status: {
       type: String,

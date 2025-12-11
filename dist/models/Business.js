@@ -70,6 +70,11 @@ const businessSchema = new Schema({
         max: 5,
         default: 0,
     },
+    reviewCount: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
     views: {
         type: Number,
         default: 0,

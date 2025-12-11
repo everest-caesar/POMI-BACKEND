@@ -8,6 +8,8 @@ import {
   deletePost,
   addReply,
   getReplies,
+  likePost,
+  reportPost,
 } from '../controllers/forum.controller.js';
 
 const router = Router();
@@ -21,5 +23,7 @@ router.post('/posts', authenticateToken, createPost);
 router.put('/posts/:id', authenticateToken, updatePost);
 router.delete('/posts/:id', authenticateToken, deletePost);
 router.post('/posts/:id/replies', authenticateToken, addReply);
+router.post('/posts/:id/like', authenticateToken, likePost);
+router.post('/posts/:id/report', authenticateToken, reportPost);
 
 export default router;

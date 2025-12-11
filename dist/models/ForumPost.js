@@ -60,6 +60,11 @@ const forumPostSchema = new Schema({
         type: Number,
         default: 0,
     },
+    reports: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     status: {
         type: String,
         enum: ['published', 'archived', 'deleted'],

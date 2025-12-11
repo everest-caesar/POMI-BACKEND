@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcryptjs from 'bcryptjs';
+import { hashPasswordPBKDF2, isPBKDF2Hash, verifyPBKDF2 } from '../utils/security.js';
 const userSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -38,6 +39,21 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    emailVerified: {
+        type: Boolean,
+        default: false,
+    },
+    failedLoginAttempts: {
+        type: Number,
+        default: 0,
+    },
+    lockUntil: {
+        type: Date,
+        default: null,
+    },
+    lastLogin: {
+        type: Date,
+    },
 }, {
     timestamps: true,
 });
@@ -46,9 +62,10 @@ userSchema.pre('save', async function (next) {
     if (!this.isModified('password'))
         return next();
     try {
-        const salt = await bcryptjs.genSalt(10);
-        const hashedPassword = await bcryptjs.hash(this.password, salt);
-        this.password = hashedPassword;
+        if (isPBKDF2Hash(this.password) || this.password.startsWith('$2a$')) {
+            return next();
+        }
+        this.password = hashPasswordPBKDF2(this.password);
         next();
     }
     catch (error) {
@@ -57,7 +74,13 @@ userSchema.pre('save', async function (next) {
 });
 // Method to compare passwords
 userSchema.methods.comparePassword = async function (passwordAttempt) {
-    return await bcryptjs.compare(passwordAttempt, this.password);
+    if (isPBKDF2Hash(this.password)) {
+        return verifyPBKDF2(passwordAttempt, this.password);
+    }
+    if (this.password.startsWith('$2a$')) {
+        return await bcryptjs.compare(passwordAttempt, this.password);
+    }
+    return false;
 };
 const User = mongoose.model('User', userSchema);
 export default User;

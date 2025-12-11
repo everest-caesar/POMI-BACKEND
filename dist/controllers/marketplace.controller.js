@@ -68,15 +68,16 @@ export const createListing = async (req, res) => {
  */
 export const listListings = async (req, res) => {
     try {
-        const { page = 1, limit = 20, category, search, status = 'active', moderationStatus } = req.query;
+        const { page = 1, limit = 20, category, search, q, status = 'active', moderationStatus } = req.query;
         const pageNum = parseInt(page);
         const limitNum = parseInt(limit);
         const filter = { status: status || 'active' };
         if (category) {
             filter.category = category;
         }
-        if (search) {
-            filter.$text = { $search: search };
+        const searchQuery = search || q;
+        if (searchQuery) {
+            filter.$text = { $search: searchQuery };
         }
         if (moderationStatus) {
             filter.moderationStatus = moderationStatus;

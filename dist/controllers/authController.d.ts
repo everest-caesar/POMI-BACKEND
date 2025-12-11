@@ -3,4 +3,7 @@ export declare const register: (req: Request, res: Response) => Promise<Response
 export declare const login: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const adminLogin: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const getCurrentUser: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getCsrfToken: (req: Request, res: Response) => Promise<void>;
+export declare const sendVerificationCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const verifyCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 //# sourceMappingURL=authController.d.ts.map

@@ -12,6 +12,7 @@ export interface IBusiness extends Document {
   status: 'draft' | 'active' | 'inactive';
   verified: boolean;
   rating?: number;
+  reviewCount?: number;
   views?: number;
   images?: string[];
   featuredImage?: string;
@@ -89,6 +90,11 @@ const businessSchema = new Schema<IBusiness>(
       type: Number,
       min: 0,
       max: 5,
+      default: 0,
+    },
+    reviewCount: {
+      type: Number,
+      min: 0,
       default: 0,
     },
     views: {

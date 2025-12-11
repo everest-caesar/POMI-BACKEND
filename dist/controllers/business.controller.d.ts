@@ -30,6 +30,7 @@ export declare const deleteBusiness: (req: AuthRequest, res: Response) => Promis
  * GET /api/v1/businesses/:id/reviews
  */
 export declare const getBusinessReviews: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const addBusinessReview: (req: AuthRequest, res: Response) => Promise<void>;
 /**
  * Upload business images
  * POST /api/v1/businesses/:id/images

@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { register, login, getCurrentUser, adminLogin } from '../controllers/authController.js';
+import { register, login, getCurrentUser, adminLogin, sendVerificationCode, verifyCode, getCsrfToken, } from '../controllers/authController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 const router = Router();
+router.get('/csrf', getCsrfToken);
+router.post('/send-code', sendVerificationCode);
+router.post('/verify-code', verifyCode);
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register a new user

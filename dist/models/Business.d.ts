@@ -11,6 +11,7 @@ export interface IBusiness extends Document {
     status: 'draft' | 'active' | 'inactive';
     verified: boolean;
     rating?: number;
+    reviewCount?: number;
     views?: number;
     images?: string[];
     featuredImage?: string;

@@ -8,6 +8,7 @@ import {
   updateBusiness,
   deleteBusiness,
   getBusinessReviews,
+  addBusinessReview,
   uploadBusinessImages,
 } from '../controllers/business.controller.js';
 
@@ -17,6 +18,7 @@ const router = Router();
 router.get('/', listBusinesses);
 router.get('/:id', getBusiness);
 router.get('/:id/reviews', getBusinessReviews);
+router.post('/:id/reviews', authenticateToken, addBusinessReview);
 
 // Private routes
 router.post('/', authenticateToken, createBusiness);

@@ -89,7 +89,7 @@ export const listListings = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { page = 1, limit = 20, category, search, status = 'active', moderationStatus } = req.query;
+    const { page = 1, limit = 20, category, search, q, status = 'active', moderationStatus } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
 
@@ -99,8 +99,9 @@ export const listListings = async (
       filter.category = category;
     }
 
-    if (search) {
-      filter.$text = { $search: search };
+    const searchQuery = (search as string) || (q as string);
+    if (searchQuery) {
+      filter.$text = { $search: searchQuery };
     }
 
     if (moderationStatus) {

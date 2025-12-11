@@ -404,6 +404,49 @@ const sendListingSubmissionNotification = async (
   });
 };
 
+const sendVerificationCodeEmail = async (
+  email: string,
+  code: string,
+  type: 'signup' | 'login' | 'password_reset' = 'signup'
+): Promise<boolean> => {
+  const subjectMap: Record<string, { subject: string; intro: string }> = {
+    signup: { subject: 'Verify your Pomi account', intro: 'Thanks for creating a Pomi account!' },
+    login: { subject: 'Your Pomi sign-in code', intro: 'Use this code to finish signing in.' },
+    password_reset: { subject: 'Reset your Pomi password', intro: 'Use this code to reset your password.' },
+  }
+  const copy = subjectMap[type] || subjectMap.signup
+
+  const html = `
+    <div style="font-family: 'Inter', Arial, sans-serif; line-height: 1.6; color: #0f172a; background: #f8fafc; padding: 24px;">
+      <div style="max-width: 520px; margin: 0 auto; background: white; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.15); overflow: hidden;">
+        <div style="padding: 24px; background: linear-gradient(120deg, #f97316, #ef4444, #db2777); color: white;">
+          <p style="margin: 0; font-size: 12px; letter-spacing: 0.45em; text-transform: uppercase; opacity: 0.85;">Pomi Security</p>
+          <h1 style="margin: 8px 0 0; font-size: 26px; font-weight: 800;">${copy.subject}</h1>
+        </div>
+        <div style="padding: 28px;">
+          <p style="margin: 0 0 18px; color: #475569;">${copy.intro}</p>
+          <div style="margin: 18px 0; padding: 20px; background: #0f172a; color: white; border-radius: 16px; text-align: center;">
+            <p style="margin: 0; font-size: 14px; letter-spacing: 0.4em; text-transform: uppercase; color: rgba(255,255,255,0.65);">Verification code</p>
+            <p style="margin: 12px 0 0; font-size: 36px; font-weight: 800; letter-spacing: 0.35em;">${code}</p>
+          </div>
+          <p style="margin: 0 0 12px; font-size: 13px; color: #94a3b8;">
+            This code expires in 10 minutes. If you did not request it, you can safely ignore this email.
+          </p>
+        </div>
+      </div>
+      <p style="text-align: center; font-size: 12px; color: #94a3b8; margin-top: 18px;">
+        © ${new Date().getFullYear()} Pomi Community Hub • Built for our community
+      </p>
+    </div>
+  `
+
+  return sendEmail({
+    to: email,
+    subject: copy.subject,
+    html,
+  })
+}
+
 export default {
   sendEmail,
   sendMessageNotification,
@@ -411,4 +454,5 @@ export default {
   sendEventCreationNotification,
   sendBusinessSubmissionNotification,
   sendListingSubmissionNotification,
+  sendVerificationCodeEmail,
 };

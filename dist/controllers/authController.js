@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ensureAdminAccount } from '../services/adminAccount.js';
+import VerificationToken from '../models/VerificationToken.js';
+import { generateVerificationCode, hashVerificationCode, isRateLimited, issueCsrfToken, } from '../utils/security.js';
+import emailService from '../services/emailService.js';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.toLowerCase();
@@ -233,6 +236,88 @@ export const getCurrentUser = async (req, res) => {
     catch (error) {
         console.error('Get current user error:', error);
         res.status(500).json({ error: 'Failed to fetch user' });
+    }
+};
+// Get CSRF token
+export const getCsrfToken = async (req, res) => {
+    try {
+        const token = issueCsrfToken();
+        res.status(200).json({ csrfToken: token });
+    }
+    catch (error) {
+        console.error('CSRF token error:', error);
+        res.status(500).json({ error: 'Failed to generate CSRF token' });
+    }
+};
+// Send verification code
+export const sendVerificationCode = async (req, res) => {
+    try {
+        const { email, type = 'signup' } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        const normalizedEmail = email.toLowerCase().trim();
+        // Rate limiting
+        if (isRateLimited(`verification:${normalizedEmail}`)) {
+            return res.status(429).json({ error: 'Too many requests. Please wait before trying again.' });
+        }
+        // Generate and hash code
+        const code = generateVerificationCode();
+        const codeHash = hashVerificationCode(code);
+        // Remove any existing tokens for this email and type
+        await VerificationToken.deleteMany({ email: normalizedEmail, type });
+        // Create new token (expires in 10 minutes)
+        await VerificationToken.create({
+            email: normalizedEmail,
+            type,
+            codeHash,
+            expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        });
+        // Send email
+        await emailService.sendVerificationCodeEmail(normalizedEmail, code, type);
+        res.status(200).json({ message: 'Verification code sent' });
+    }
+    catch (error) {
+        console.error('Send verification code error:', error);
+        res.status(500).json({ error: 'Failed to send verification code' });
+    }
+};
+// Verify code
+export const verifyCode = async (req, res) => {
+    try {
+        const { email, code, type = 'signup' } = req.body;
+        if (!email || !code) {
+            return res.status(400).json({ error: 'Email and code are required' });
+        }
+        const normalizedEmail = email.toLowerCase().trim();
+        // Find token
+        const token = await VerificationToken.findOne({
+            email: normalizedEmail,
+            type,
+            expiresAt: { $gt: new Date() },
+        });
+        if (!token) {
+            return res.status(400).json({ error: 'Invalid or expired verification code' });
+        }
+        // Check attempts
+        if (token.attempts >= 5) {
+            await VerificationToken.deleteOne({ _id: token._id });
+            return res.status(400).json({ error: 'Too many failed attempts. Please request a new code.' });
+        }
+        // Verify code
+        const codeHash = hashVerificationCode(code);
+        if (codeHash !== token.codeHash) {
+            token.attempts += 1;
+            await token.save();
+            return res.status(400).json({ error: 'Invalid verification code' });
+        }
+        // Delete token after successful verification
+        await VerificationToken.deleteOne({ _id: token._id });
+        res.status(200).json({ message: 'Code verified successfully', verified: true });
+    }
+    catch (error) {
+        console.error('Verify code error:', error);
+        res.status(500).json({ error: 'Failed to verify code' });
     }
 };
 //# sourceMappingURL=authController.js.map

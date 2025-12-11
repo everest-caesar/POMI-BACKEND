@@ -9,6 +9,7 @@ export interface IForumPost extends Document {
     repliesCount: number;
     viewsCount: number;
     votes: number;
+    reports: number;
     status: 'published' | 'archived' | 'deleted';
     createdAt: Date;
     updatedAt: Date;

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 import apiRoutes from './routes/index.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,10 @@ app.use(cors({
   origin: process.env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
   credentials: true,
 }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+app.use(securityHeaders);
 
 // MongoDB Connection
 const connectDB = async () => {

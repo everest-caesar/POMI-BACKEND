@@ -5,6 +5,8 @@ import { AuthRequest } from '../middleware/auth.js';
  * POST /api/v1/forums/posts
  */
 export declare const createPost: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const likePost: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const reportPost: (req: AuthRequest, res: Response) => Promise<void>;
 /**
  * List forum posts
  * GET /api/v1/forums/posts

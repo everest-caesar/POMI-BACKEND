@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import mongoose from 'mongoose';
 import 'dotenv/config';
 import apiRoutes from './routes/index.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://pomi_user:pomi_password@localhost:27017/pomi?authSource=admin';
@@ -13,6 +15,10 @@ app.use(cors({
     origin: process.env.CORS_ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
     credentials: true,
 }));
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+app.use(securityHeaders);
 // MongoDB Connection
 const connectDB = async () => {
     try {

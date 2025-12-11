@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcryptjs from 'bcryptjs';
+import { hashPasswordPBKDF2, isPBKDF2Hash, verifyPBKDF2 } from '../utils/security.js';
 
 export interface IUser {
   _id: string;
@@ -10,6 +11,10 @@ export interface IUser {
   area?: string;
   workOrSchool?: string;
   isAdmin: boolean;
+  emailVerified: boolean;
+  failedLoginAttempts?: number;
+  lockUntil?: Date | null;
+  lastLogin?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
@@ -53,6 +58,21 @@ const userSchema = new mongoose.Schema<IUser>({
     type: Boolean,
     default: false,
   },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  failedLoginAttempts: {
+    type: Number,
+    default: 0,
+  },
+  lockUntil: {
+    type: Date,
+    default: null,
+  },
+  lastLogin: {
+    type: Date,
+  },
 }, {
   timestamps: true,
 });
@@ -62,9 +82,10 @@ userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
 
   try {
-    const salt = await bcryptjs.genSalt(10);
-    const hashedPassword = await bcryptjs.hash(this.password, salt);
-    this.password = hashedPassword;
+    if (isPBKDF2Hash(this.password) || this.password.startsWith('$2a$')) {
+      return next();
+    }
+    this.password = hashPasswordPBKDF2(this.password);
     next();
   } catch (error) {
     next(error as Error);
@@ -73,7 +94,13 @@ userSchema.pre('save', async function(next) {
 
 // Method to compare passwords
 userSchema.methods.comparePassword = async function(passwordAttempt: string): Promise<boolean> {
-  return await bcryptjs.compare(passwordAttempt, this.password);
+  if (isPBKDF2Hash(this.password)) {
+    return verifyPBKDF2(passwordAttempt, this.password);
+  }
+  if (this.password.startsWith('$2a$')) {
+    return await bcryptjs.compare(passwordAttempt, this.password);
+  }
+  return false;
 };
 
 const User = mongoose.model<IUser>('User', userSchema);

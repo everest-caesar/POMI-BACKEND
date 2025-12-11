@@ -8,6 +8,10 @@ export interface IUser {
     area?: string;
     workOrSchool?: string;
     isAdmin: boolean;
+    emailVerified: boolean;
+    failedLoginAttempts?: number;
+    lockUntil?: Date | null;
+    lastLogin?: Date | null;
     createdAt: Date;
     updatedAt: Date;
     comparePassword(password: string): Promise<boolean>;
